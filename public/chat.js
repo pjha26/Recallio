@@ -1,6 +1,8 @@
 const select = document.querySelector('select');
 const status = document.querySelector('#status');
 const messages = document.querySelector('#messages');
+const welcome = document.querySelector('#welcome');
+const suggestions = [...welcome.querySelectorAll('[data-prompt]')];
 const form = document.querySelector('form');
 const input = form.querySelector('textarea');
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -10,6 +12,7 @@ let pending = false;
 function showTurn(turn) {
   const article = document.createElement('article');
   const question = document.createElement('p');
+  question.className = 'question';
   question.textContent = turn.question;
   article.append(question);
   if (turn.result) {
@@ -60,10 +63,14 @@ async function refresh() {
   const data = await response.json();
   sessionStorage.setItem('recallio-chat', chat);
   select.replaceChildren(...data.chats.map(item => new Option(item.title.slice(0, 65), item.id)));
-  if (!data.chats.some(item => item.id === chat)) select.add(new Option('New chat', chat));
+  if (!data.chats.some(item => item.id === chat)) {
+    select.add(new Option(data.chats.length ? 'New conversation' : 'Conversation', chat));
+  }
   select.value = chat;
   messages.replaceChildren();
   data.turns.forEach(showTurn);
+  welcome.hidden = data.turns.length > 0;
+  messages.hidden = !welcome.hidden;
   if (!data.configured && !status.textContent) status.textContent = 'Add your model and search settings in .env for live research.';
 }
 
@@ -73,6 +80,7 @@ async function sendTurn(turn) {
   form.querySelector('button').disabled = true;
   select.disabled = true;
   document.querySelector('#new').disabled = true;
+  suggestions.forEach(button => { button.disabled = true; });
   status.textContent = 'Sending…';
   try {
     const response = await fetch('/api/chat', {
@@ -107,6 +115,7 @@ async function sendTurn(turn) {
     form.querySelector('button').disabled = false;
     select.disabled = false;
     document.querySelector('#new').disabled = false;
+    suggestions.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -114,6 +123,12 @@ form.addEventListener('submit', event => {
   event.preventDefault();
   if (input.value.trim()) sendTurn({ id: crypto.randomUUID(), question: input.value, zone });
 });
+for (const button of suggestions) {
+  button.addEventListener('click', () => {
+    input.value = button.dataset.prompt;
+    input.focus();
+  });
+}
 select.addEventListener('change', () => { chat = select.value; loadChat(); });
 document.querySelector('#new').addEventListener('click', () => { chat = crypto.randomUUID(); input.value = ''; loadChat(); });
 
