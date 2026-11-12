@@ -6,7 +6,7 @@ A Node HTTP server serves the chat UI, stores turns in SQLite, and controls the 
 
 For each turn, the server selects recent and relevant historical messages using date and keyword matching. The model proposes a bounded search plan. The server runs up to four searches at a time and tracks failed and empty queries. It assigns evidence IDs to returned URLs and checks every returned citation ID. Citation validation establishes where a link came from. Whether the excerpt supports a claim is evaluated separately.
 
-The comparison distinguishes the previous answer, current evidence, and evidence of a change during the requested window. For pricing, the model compares the same plan, region, currency, and billing interval. A present-day price can establish today's terms even if an earlier price cannot be verified.
+For dated comparisons, several entities, or an empty check, a short review can use one remaining search for the most important evidence gap. If the review fails, the agent answers from the evidence it already has. The comparison distinguishes the previous answer, current evidence, and evidence of a change during the requested window. For pricing, the model compares the same plan, region, currency, and billing interval. A present-day price can establish today's terms even if an earlier price cannot be verified.
 
 ## Why these choices
 
@@ -16,4 +16,4 @@ SQLite avoids a database service. Date and keyword lookup handles the challenge'
 
 ## What is verified and what comes next
 
-Deterministic tests cover restart recovery, duplicate requests, session scoping, dated retrieval, and model failover after search. Free-account quotas and live provider quality need credentials and live evaluation. With another week, I would build a dated set of pricing and release changes, compare Exa and SearXNG on evidence coverage and p95 latency, and improve retrieval where the sources fall short.
+Deterministic tests cover restart recovery, duplicate requests, session scoping, dated retrieval, model failover after search, and a targeted follow-up with incomplete evidence. With another week, I would build a dated set of pricing and release changes, compare Exa and SearXNG on evidence coverage and p95 latency, and improve retrieval where the sources fall short.
