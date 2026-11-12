@@ -1,3 +1,5 @@
+import { readPublicPage } from './pages.js';
+
 const timeout = (signal, ms) => AbortSignal.any([signal, AbortSignal.timeout(ms)]);
 
 async function json(url, options) {
@@ -44,6 +46,7 @@ export function createProviders(env) {
   if (endpoint && !['http:', 'https:'].includes(endpoint.protocol)) throw new Error('Invalid SEARXNG_URL');
   const cooldown = new Map();
   return {
+    readPage: readPublicPage,
     available: models.length > 0,
     searchAvailable: Boolean(endpoint || env.EXA_API_KEY),
     async model(system, input, validate, signal, onFallback) {

@@ -12,6 +12,32 @@ Use Node.js 22.13 or later. Run `npm install`, copy `.env.example` to `.env`, fi
 
 ## Try it
 
+### Use SearXNG without a search key
+
+With Docker running, create a folder called `searxng-config` outside the repository. Save this as `settings.yml` inside it and replace the placeholder with a random secret.
+
+```yaml
+use_default_settings: true
+server:
+  secret_key: "replace-with-a-random-secret"
+  limiter: false
+search:
+  formats:
+    - html
+    - json
+```
+
+From the folder containing `searxng-config`, run the following in PowerShell. The port is bound to this machine only.
+
+```powershell
+$config = (Resolve-Path ./searxng-config).Path
+docker run -d --name recallio-searxng --restart unless-stopped -p 127.0.0.1:43193:8080 --mount "type=bind,source=$config,target=/etc/searxng" searxng/searxng:latest
+```
+
+Open [a test JSON search](http://127.0.0.1:43193/search?q=Supabase+pricing&format=json), then set `SEARXNG_URL=http://127.0.0.1:43193` in Recallio's `.env` and restart Recallio.
+
+### Check conversation recall
+
 1. Ask “Compare the entry-level Postgres hosting plans from Neon and Supabase for a small app.”
 2. Restart Recallio, choose **New chat**, and ask “What did we conclude about Postgres hosting, and has any pricing changed since?”
 3. Check that the answer recalls the earlier comparison, links to evidence, and calls out any missing historical baseline.

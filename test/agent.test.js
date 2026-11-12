@@ -67,12 +67,17 @@ test('one follow-up targets missing dated evidence and preserves verified result
         if (modelCalls === 2) {
           assert.equal(input.coverage[0].failed, true);
           assert.equal(input.evidence[0].date, null);
-          return validate({ queries: [query('B dated price announcement', '2026-11-09')] });
+          return validate({ queries: [query('B dated price announcement', '2026-11-09')], read: [1] });
         }
         assert.equal(input.coverage.length, 4);
         assert.deepEqual(input.coverage[3].ids, []);
         assert.equal(input.evidence[1].domain, 'c.example');
+        assert.equal(input.evidence[0].pageText, 'Pro costs $20 per month.');
         return validate({ answer: 'C changed on November 11 [2]. I could not verify changes for A or B.', citations: [2] });
+      },
+      async readPage(url) {
+        assert.equal(url, 'https://b.example/pricing');
+        return 'Pro costs $20 per month.';
       },
     },
   });

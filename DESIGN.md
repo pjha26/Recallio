@@ -6,7 +6,7 @@ A Node HTTP server serves the chat UI, stores turns in SQLite, and controls the 
 
 For each turn, the server selects recent and relevant historical messages using date and keyword matching. The model proposes a bounded search plan. The server runs up to four searches at a time and tracks failed and empty queries. It assigns evidence IDs to returned URLs and checks every returned citation ID. Citation validation establishes where a link came from. Whether the excerpt supports a claim is evaluated separately.
 
-For dated comparisons, several entities, or an empty check, a short review can use one remaining search for the most important evidence gap. If the review fails, the agent answers from the evidence it already has. The comparison distinguishes the previous answer, current evidence, and evidence of a change during the requested window. For pricing, the model compares the same plan, region, currency, and billing interval. A present-day price can establish today's terms even if an earlier price cannot be verified.
+For pricing, dated comparisons, several entities, or an empty check, a short review can use one remaining search for the most important evidence gap. It can also read up to two result pages when the excerpts omit relevant details. Page reads accept public HTTPS HTML, use a pinned public IPv4 address, and have size and time limits. If a page is unavailable, the original excerpt stays in evidence. The comparison distinguishes the previous answer, current evidence, and evidence of a change during the requested window. A present-day price can establish today's terms even if an earlier price cannot be verified.
 
 ## Why these choices
 
