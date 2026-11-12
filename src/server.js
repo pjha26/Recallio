@@ -10,6 +10,7 @@ const assets = new Map([
   ['/chat.js', ['chat.js', 'text/javascript; charset=utf-8']],
   ['/retro.css', ['retro.css', 'text/css; charset=utf-8']],
   ['/terminal.png', ['terminal.png', 'image/png']],
+  ['/terminal-violet.png', ['terminal-violet.png', 'image/png']],
   ['/workbench.woff2', ['workbench.woff2', 'font/woff2']],
 ]);
 const providers = createProviders(process.env);

@@ -2,12 +2,36 @@ const select = document.querySelector('select');
 const status = document.querySelector('#status');
 const messages = document.querySelector('#messages');
 const welcome = document.querySelector('#welcome');
+const themeButton = document.querySelector('#theme');
+const terminal = welcome.querySelector('.art img');
 const suggestions = [...welcome.querySelectorAll('[data-prompt]')];
 const form = document.querySelector('form');
 const input = form.querySelector('textarea');
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 let chat = sessionStorage.getItem('recallio-chat') || crypto.randomUUID();
 let pending = false;
+
+function setVioletTheme(enabled) {
+  document.documentElement.dataset.theme = enabled ? 'violet' : 'arcade';
+  themeButton.setAttribute('aria-pressed', String(enabled));
+  terminal.src = enabled ? '/terminal-violet.png' : '/terminal.png';
+}
+
+try {
+  setVioletTheme(localStorage.getItem('recallio-theme') === 'violet');
+} catch {
+  setVioletTheme(false);
+}
+
+themeButton.addEventListener('click', () => {
+  const enabled = themeButton.getAttribute('aria-pressed') !== 'true';
+  setVioletTheme(enabled);
+  try {
+    localStorage.setItem('recallio-theme', enabled ? 'violet' : 'arcade');
+  } catch {
+    // The toggle still works when storage is unavailable.
+  }
+});
 
 function showTurn(turn) {
   const article = document.createElement('article');
