@@ -86,7 +86,7 @@ export function createProviders(env) {
         });
       }
       if (!Array.isArray(data.results)) throw new Error('Invalid search response');
-      return data.results.slice(0, 3).flatMap(result => {
+      return data.results.slice(0, 5).flatMap(result => {
         try {
           const url = new URL(result.url);
           if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return [];
@@ -99,3 +99,4 @@ export function createProviders(env) {
     },
   };
 }
+

@@ -36,7 +36,9 @@ const fixtureProviders = {
       Freshsales: 'The subscription price increased on November 11, 2026.',
       Supabase: 'The Pro subscription starts at $25 per month. The plan includes a $10 compute credit.',
     }[entity];
-    return [{ url: 'https://' + entity.toLowerCase().replaceAll(' ', '-') + '.example/evidence',
+    const domain = { HubSpot: 'hubspot.com', Salesforce: 'salesforce.com', Pipedrive: 'pipedrive.com',
+      'Zoho CRM': 'zoho.com', Freshsales: 'freshworks.com', Supabase: 'supabase.com' }[entity];
+    return [{ url: 'https://' + domain + (normalized.includes('pricing') ? '/pricing' : '/release-notes'),
       title: entity + ' fixture evidence', text, date: null }];
   },
 };
@@ -80,3 +82,4 @@ for (const { name } of cases) {
     expected: range('expected'), checks: range('checks'), covered: range('covered'), verified: range('verified'), elapsedMs: range('elapsedMs'),
     rejectedSynthesis: completed.filter(item => item.unverified).length }));
 }
+

@@ -1,3 +1,5 @@
+import { isOfficial, officialDomain, summarizeChecks } from './vendor-evidence.js';
+
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 const day = (iso, zone) => new Intl.DateTimeFormat('en-CA', { timeZone: zone, dateStyle: 'short' }).format(new Date(iso));
 
@@ -55,7 +57,7 @@ For changes since a prior discussion, quote the date from the matching history e
 Compare equivalent billing period, plan, region, and usage. Mention failed or empty checks and uncertainty.
 State which sources you checked when no change was found. If coverage is incomplete, dates are missing, or sources conflict, say what you could not verify. Do not infer that nothing changed from a lack of evidence.
 If several entities are requested give each a status. If no matching conversation is available, say so.
-When a checklist is supplied, return outcomes (array of {target, status, id, date}) using checklist IDs. The status must be confirmed_change, no_change_found, or unable_to_verify. Use confirmed_change only with a validated dated price_change or shipped check citing that target's evidence. Supply its event date as YYYY-MM-DD. Use no_change_found only after reviewing relevant evidence for that target; if evidence is inadequate use unable_to_verify with id and date null. Keep the prose consistent with these outcomes.
+When a checklist is supplied, use its server-verified statuses and citations as the basis for the answer. Do not promote an unresolved row to a confirmed change. If current pricing is known but a historical change is unresolved, state today's price separately.
 Do not generate links. Never invent chat history or evidence.`;
 
 function readQueries(queries, limit) {
@@ -94,7 +96,8 @@ function readPlan(value, history) {
   const initial = checklist.map(({ target, vendor, kind }) => ({
     target, since: null,
     query: vendor + (kind === 'pricing' ? ' official pricing plans' : ' official changelog shipped releases') +
-      (kind === 'release' && since ? ' since ' + since : ''),
+      (kind === 'release' && since ? ' since ' + since : '') +
+      (officialDomain(vendor) ? ' site:' + officialDomain(vendor) : ''),
     objective: kind === 'pricing' ? 'Find official current subscription prices and any dated pricing changes.' :
       'Find official dated release notes describing features already shipped.',
   }));
@@ -130,7 +133,9 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   }
 
   function addResult({ query, target, matches, failed, reason }) {
-    const ids = matches.slice(0, 2).map(source => {
+    const domain = officialDomain(plan.checklist.find(check => check.target === target)?.vendor ?? '');
+    const ranked = matches.toSorted((a, b) => Number(isOfficial(b, domain)) - Number(isOfficial(a, domain)));
+    const ids = ranked.slice(0, 2).map(source => {
       let index = evidence.findIndex(item => item.url === source.url);
       if (index === -1) {
         index = evidence.length;
@@ -171,14 +176,19 @@ export async function answerTurn({ question, history, zone, now, providers, prog
     } catch {
       // The initial evidence remains usable if the optional review times out.
     }
-    const gap = plan.checklist.find(check => !coverage.some(result => result.target === check.target && result.ids.length));
+    const covered = check => coverage.some(result => result.target === check.target && result.ids.some(id => {
+      const domain = officialDomain(check.vendor);
+      return !domain || isOfficial(evidence[id - 1], domain);
+    }));
+    const gap = plan.checklist.find(check => !covered(check));
     let [next] = followUp.queries;
     const alreadySearched = query => coverage.some(check => check.query.trim().toLowerCase() === query.trim().toLowerCase());
-    if (plan.checklist.length && (!plan.checklist.some(check => check.target === next?.target) ||
-        (next && alreadySearched(next.query)) || (gap && coverage.some(check => check.target === next?.target && check.ids.length)))) {
+    const proposedCheck = plan.checklist.find(check => check.target === next?.target);
+    if (plan.checklist.length && (!proposedCheck || alreadySearched(next.query) || (gap && covered(proposedCheck)))) {
       next = gap && {
         target: gap.target, since: null,
-        query: gap.vendor + (gap.kind === 'pricing' ? ' official subscription pricing update announcement' : ' official product release notes'),
+        query: gap.vendor + (gap.kind === 'pricing' ? ' official subscription pricing update announcement' : ' official product release notes') +
+          (officialDomain(gap.vendor) ? ' site:' + officialDomain(gap.vendor) : ''),
         objective: 'Recover missing evidence from an official source and prefer dated records.',
       };
     }
@@ -205,63 +215,48 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   }
 
   const incomplete = coverage.filter(check => check.failed).length;
+  const checklist = summarizeChecks(plan.checklist, coverage, evidence, plan.since, day(now, zone));
+  const checklistCitations = checklist.flatMap(check => check.citation ? [check.citation] : []);
+  const sourcesFor = ids => [...new Set(ids)].map(id => ({ id, ...evidence[id - 1] }));
   let validationFailed = false;
   try {
-    return await providers.model(answerPrompt, { ...answerContext, evidence: excerpts() }, value => {
+    return await providers.model(answerPrompt, { ...answerContext, checklist, evidence: excerpts() }, value => {
       validationFailed = true;
       if (typeof value?.answer !== 'string' || !value.answer.trim() || value.answer.length > 3500 || !Array.isArray(value.citations)) throw new Error('Invalid answer');
       const inline = [...value.answer.matchAll(/(?:\[|【)(\d+(?:\s*,\s*\d+)*)(?:\]|】)/g)]
         .flatMap(match => match[1].split(',').map(Number));
       const ids = [...new Set([...value.citations, ...inline])];
       if (ids.some(id => !Number.isInteger(id) || !evidence[id - 1])) throw new Error('Unknown citation');
+      validateChecklistClaims(value.answer, checklist);
       validateEvidenceChecks(value.checks, ids, excerpts());
-      const checklist = summarizeChecks(plan.checklist, coverage, value.outcomes, value.checks, ids, plan.since, now.slice(0, 10));
       validationFailed = false;
-      return { answer: value.answer, sources: ids.map(id => ({ id, ...evidence[id - 1] })), incomplete, coverage, checklist };
+      return { answer: value.answer, sources: sourcesFor([...ids, ...checklistCitations]), incomplete, coverage, checklist };
     }, signal, progress);
   } catch (error) {
-    if (!validationFailed || !evidence.length || signal.aborted) throw error;
-    return { answer: 'I found sources, but could not verify the proposed answer against them. The links below are the sources I checked.',
-      sources: evidence.slice(0, 5).map((source, index) => ({ id: index + 1, ...source })),
-      incomplete, coverage, checklist: summarizeChecks(plan.checklist, coverage), unverified: true };
+    if ((!validationFailed && !checklist.length) || !evidence.length || signal.aborted) throw error;
+    return { answer: 'I checked the available sources. The checklist shows which dated changes were confirmed and which remain unverified. An unverified result does not mean nothing changed.',
+      sources: sourcesFor([...checklistCitations, ...evidence.slice(0, 5).map((_, index) => index + 1)]),
+      incomplete, coverage, checklist, unverified: true };
   }
 }
 
-function summarizeChecks(checklist, coverage, outcomes = [], claims = [], citations = [], since, today) {
-  return checklist.map(check => {
-    const ids = [...new Set(coverage.filter(item => item.target === check.target).flatMap(item => item.ids))];
-    const outcome = Array.isArray(outcomes) && outcomes.find(item => item?.target === check.target);
-    let status = 'unable_to_verify';
-    if (ids.includes(outcome?.id) && citations.includes(outcome.id)) {
-      if (outcome.status === 'no_change_found') status = outcome.status;
-      const kind = check.kind === 'pricing' ? 'price_change' : 'shipped';
-      if (outcome.status === 'confirmed_change' && isWithinWindow(outcome.date, since, today) &&
-          claims.some(claim => claim.id === outcome.id && claim.kind === kind && quoteMentionsDate(claim.quote, outcome.date))) {
-        status = outcome.status;
-      }
+function validateChecklistClaims(answer, checklist) {
+  const sentences = answer.split(/(?<=[.!?])\s+|\r?\n/);
+  for (const check of checklist.filter(item => item.status === 'unable_to_verify')) {
+    const terms = check.kind === 'pricing' ? /\b(?:pric(?:e|ed|ing)|subscription|cost)\b/i :
+      /\b(?:release|shipped|launched|version|feature)\b/i;
+    const claim = check.kind === 'pricing'
+      ? /\b(?:changed|increased|decreased|raised|lowered|unchanged|no\s+(?:(?:reported|identified|observed|found)\s+)?(?:(?:pricing|price|subscription)\s+)?changes?|not changed)\b/i
+      : /\b(?:shipped|released|launched|went live|generally available|no releases?|not released)\b/i;
+    if (sentences.some(sentence => {
+      if (!terms.test(sentence) || !claim.test(sentence)) return false;
+      const namesVendor = checklist.some(item => item.kind === check.kind &&
+        sentence.toLowerCase().includes(item.vendor.toLowerCase().split(' ')[0]));
+      return sentence.toLowerCase().includes(check.vendor.toLowerCase().split(' ')[0]) || !namesVendor;
+    })) {
+      throw new Error('Answer conflicts with an unresolved checklist item');
     }
-    return { ...check, status, evidenceCount: ids.length,
-      ...(status !== 'unable_to_verify' ? { citation: outcome.id } : {}) };
-  });
-}
-
-function isWithinWindow(date, since, today) {
-  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  const parsed = new Date(date);
-  return Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === date &&
-    date <= today && (!since || date >= since);
-}
-
-function quoteMentionsDate(quote, date) {
-  const parsed = new Date(date);
-  const month = parsed.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }).toLowerCase();
-  const day = parsed.getUTCDate();
-  const text = normalizeQuote(quote);
-  const monthPattern = '(?:' + month + '|' + month.slice(0, 3) + '\\.?)';
-  if (text.includes(date)) return true;
-  const writtenDate = new RegExp('\\b(?:' + monthPattern + '\\s+0?' + day + '|0?' + day + '\\s+' + monthPattern + ')\\b(?:,?\\s+(20\\d{2})\\b)?');
-  const match = writtenDate.exec(text);
-  return Boolean(match && (!match[1] || match[1] === date.slice(0, 4)));
+  }
 }
 
 const normalizeQuote = text => text.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -290,3 +285,4 @@ export function validateEvidenceChecks(checks, citations, evidence) {
     if (supported[kind] !== true) throw new Error('Quote does not support the evidence check');
   }
 }
+

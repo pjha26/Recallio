@@ -37,3 +37,24 @@ test('a rejected claim returns the checked sources without repeating the claim',
   assert.equal(result.sources[0].url, url);
   assert.doesNotMatch(result.answer, /\$10/);
 });
+
+test('an unresolved checklist cannot be contradicted by a no-change summary', async () => {
+  const result = await answerTurn({
+    question: 'Did ExampleCorp change pricing?', history: [], zone: 'UTC',
+    now: '2026-11-12T15:00:00Z', progress() {}, signal: new AbortController().signal,
+    providers: {
+      async search() {
+        return [{ url: 'https://example.test/pricing', title: 'Pricing', text: 'The current plan starts at $20.' }];
+      },
+      async model(_prompt, input, validate) {
+        if (!input.evidence) return validate({ focus: 'Pricing', review: false, queries: [],
+          targets: [{ vendor: 'ExampleCorp', kinds: ['pricing'] }] });
+        return validate({ answer: 'There have been no reported price changes since Monday.', citations: [], checks: [] });
+      },
+    },
+  });
+  assert.equal(result.unverified, true);
+  assert.match(result.answer, /does not mean nothing changed/);
+  assert.equal(result.checklist[0].status, 'unable_to_verify');
+});
+

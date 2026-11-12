@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectHistory, answerTurn } from '../src/agent.js';
 import { createProviders } from '../src/providers.js';
+import { officialDomain } from '../src/vendor-evidence.js';
 
 test('five vendors get separate checks, one retry, and evidence-scoped statuses', async () => {
   const vendors = ['HubSpot', 'Salesforce', 'Pipedrive', 'Zoho CRM', 'Freshsales'];
   const searched = [];
+  let pipedriveFailed = false;
   const dated = 'Version 4 shipped on November 11, 2026.';
   const result = await answerTurn({
     question: 'Did the five CRM vendors change pricing or ship releases?', history: [], zone: 'UTC',
@@ -13,27 +15,26 @@ test('five vendors get separate checks, one retry, and evidence-scoped statuses'
     providers: {
       async search(query) {
         searched.push(query);
-        if (query.startsWith('Pipedrive')) throw new Error('Upstream unavailable');
-        return [{ url: 'https://example.com/' + encodeURIComponent(query), title: query,
-          text: query.includes('changelog') ? dated : 'The current subscription starts at $25 per month.' }];
+        if (query.startsWith('Pipedrive') && !pipedriveFailed) {
+          pipedriveFailed = true;
+          throw new Error('Upstream unavailable');
+        }
+        const vendor = vendors.find(name => query.startsWith(name));
+        const release = /changelog|release notes/i.test(query);
+        return [{ url: `https://${officialDomain(vendor)}/${release ? 'updates' : 'pricing'}`,
+          title: query, text: release ? dated : 'The current subscription starts at $25 per month.' }];
       },
       async model(_prompt, input, validate) {
         if (!input.evidence) return validate({ focus: 'CRM checks', queries: [], review: true,
           targets: vendors.map(vendor => ({ vendor, kinds: ['pricing', 'release'] })) });
         if (input.coverage.length === 10) return validate({ queries: [] });
-        const release = input.coverage.find(check => check.target === 2).ids[0];
-        return validate({ answer: 'The checked release shipped [2].', citations: [release],
-          checks: [{ kind: 'shipped', id: release, quote: dated }],
-          outcomes: [{ target: 2, id: release, status: 'confirmed_change', date: '2026-11-11' },
-            { target: 4, id: release, status: 'confirmed_change', date: '2026-11-11' },
-            { target: 5, id: release, status: 'no_change_found' }] });
+        return validate({ answer: 'I checked the official pages.', citations: [], checks: [] });
       },
     },
   });
   assert.equal(searched.length, 11);
-  assert.match(searched.at(-1), /^Pipedrive/);
   assert.equal(result.checklist.length, 10);
-  assert.deepEqual(result.checklist.filter(check => check.status === 'confirmed_change').map(check => check.target), [2]);
+  assert.deepEqual(result.checklist.filter(check => check.status === 'confirmed_change').map(check => check.target), [2, 4, 6, 8, 10]);
   assert.equal(result.checklist.find(check => check.target === 5).status, 'unable_to_verify');
 });
 
@@ -157,3 +158,4 @@ test('one follow-up targets missing dated evidence and preserves verified result
   assert.equal(result.sources[0].url, 'https://c.example/pricing');
   assert.match(result.answer, /could not verify changes for A or B/);
 });
+
