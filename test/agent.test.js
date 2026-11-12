@@ -16,11 +16,19 @@ test('Gemini completes the answer using existing evidence after Groq fails', asy
   t.mock.method(globalThis, 'fetch', async (url, { body }) => {
     const host = new URL(url).hostname;
     calls.push(host);
-    if (host === 'api.exa.ai') return Response.json({
+    if (host === 'api.exa.ai') {
+      assert.deepEqual(JSON.parse(body), {
+        query: 'Example pricing', objective: 'Prefer the vendor pricing page and extract the current price.',
+        contents: { highlights: true },
+      });
+      return Response.json({
       results: [{ url: 'https://example.com/pricing', title: 'Official pricing', highlights: ['The current price is $20.'] }],
-    });
+      });
+    }
     if (host === 'api.groq.com' && calls.length === 1) return groq({
-      focus: 'Verify price', queries: [{ query: 'Example pricing', since: null }],
+      focus: 'Verify price', queries: [{
+        query: 'Example pricing', objective: 'Prefer the vendor pricing page and extract the current price.', since: null,
+      }],
     });
     if (host === 'api.groq.com') return new Response('', { status: 503 });
     assert.match(body, /current price is/);

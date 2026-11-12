@@ -64,7 +64,7 @@ export function createProviders(env) {
       }
       throw new Error('Models are unavailable. Please retry.');
     },
-    async search(query, since, signal) {
+    async search(query, objective, since, signal) {
       let data;
       if (endpoint) {
         const url = new URL(endpoint);
@@ -76,7 +76,7 @@ export function createProviders(env) {
         data = await json('https://api.exa.ai/search', {
           method: 'POST', signal: timeout(signal, 4500),
           headers: { 'Content-Type': 'application/json', 'x-api-key': env.EXA_API_KEY },
-          body: JSON.stringify({ query, type: 'auto', numResults: 3,
+          body: JSON.stringify({ query, objective,
             ...(since ? { startPublishedDate: since } : {}), contents: { highlights: true } }),
         });
       }
