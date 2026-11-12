@@ -28,7 +28,36 @@
             <button type="button" data-prompt="Has any vendor on our shortlist changed pricing or shipped a major release?">Review a vendor shortlist</button>
           </div>
         </div>
-        <div class="art"><img src="/terminal.png" width="440" height="440" alt=""></div>
+        <div class="arcade">
+          <div id="arcade-intro">
+            <div class="art"><img src="/terminal.png" width="440" height="440" alt=""></div>
+            <button id="play-memory" type="button" aria-controls="memory-run" aria-expanded="false">Play Memory Run</button>
+          </div>
+          <section id="memory-run" aria-labelledby="memory-title" hidden>
+            <header class="game-hud">
+              <h3 id="memory-title">Memory Run</h3>
+              <span id="game-score">Disks 0/3</span>
+            </header>
+            <div id="game-board" role="group" tabindex="0" aria-label="Memory Run board" aria-describedby="game-help">
+              <div id="game-tiles" aria-hidden="true">
+                <img id="game-player" src="/terminal.png" width="44" height="44" alt="">
+                <img id="game-disk" src="/memory-disk.png" width="32" height="32" alt="">
+              </div>
+            </div>
+            <div class="game-controls">
+              <div class="game-directions" aria-label="Movement controls">
+                <button type="button" data-move="ArrowUp" aria-label="Move up">↑</button>
+                <button type="button" data-move="ArrowDown" aria-label="Move down">↓</button>
+                <button type="button" data-move="ArrowLeft" aria-label="Move left">←</button>
+                <button type="button" data-move="ArrowRight" aria-label="Move right">→</button>
+              </div>
+              <button id="replay-memory" type="button" hidden>Play again</button>
+              <button id="exit-memory" type="button">Exit game</button>
+            </div>
+            <p id="game-help">Collect three disks with the arrow keys or on-screen controls.</p>
+            <p id="game-announcement" class="visually-hidden" role="status"></p>
+          </section>
+        </div>
       </section>
       <section id="messages" aria-label="Messages" aria-live="polite" hidden></section>
     </div>

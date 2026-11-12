@@ -1,9 +1,12 @@
+import './memory-run.js';
+
 const select = document.querySelector('select');
 const status = document.querySelector('#status');
 const messages = document.querySelector('#messages');
 const welcome = document.querySelector('#welcome');
 const themeButton = document.querySelector('#theme');
 const terminal = welcome.querySelector('.art img');
+const gamePlayer = document.querySelector('#game-player');
 const suggestions = [...welcome.querySelectorAll('[data-prompt]')];
 const form = document.querySelector('form');
 const input = form.querySelector('textarea');
@@ -15,6 +18,7 @@ function setVioletTheme(enabled) {
   document.documentElement.dataset.theme = enabled ? 'violet' : 'arcade';
   themeButton.setAttribute('aria-pressed', String(enabled));
   terminal.src = enabled ? '/terminal-violet.png' : '/terminal.png';
+  gamePlayer.src = terminal.src;
 }
 
 try {

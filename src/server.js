@@ -11,6 +11,8 @@ const assets = new Map([
   ['/retro.css', ['retro.css', 'text/css; charset=utf-8']],
   ['/terminal.png', ['terminal.png', 'image/png']],
   ['/terminal-violet.png', ['terminal-violet.png', 'image/png']],
+  ['/memory-disk.png', ['memory-disk.png', 'image/png']],
+  ['/memory-run.js', ['memory-run.js', 'text/javascript; charset=utf-8']],
   ['/workbench.woff2', ['workbench.woff2', 'font/woff2']],
 ]);
 const providers = createProviders(process.env);
