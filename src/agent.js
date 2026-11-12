@@ -138,6 +138,11 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       progress('Checking a gap in the evidence');
       tasks.push(search(next, signal).then(addResult));
     }
+    if (providers.readPage && !followUp.read.length && /\b(?:price|pricing|cost|subscription)\b/i.test(question + ' ' + plan.focus)) {
+      const pricingIndex = evidence.findIndex(source => /\/pricing\/?$/i.test(new URL(source.url).pathname)
+        && !/\$\s*\d+(?:\.\d+)?\s*(?:\/|per)\s*(?:mo\b|month\b|year\b)/i.test(source.text));
+      if (pricingIndex !== -1) followUp.read.push(pricingIndex + 1);
+    }
     if (providers.readPage && followUp.read.length && !signal.aborted) {
       progress('Reading source pages');
       for (const id of followUp.read) {

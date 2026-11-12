@@ -67,7 +67,7 @@ test('one follow-up targets missing dated evidence and preserves verified result
         if (modelCalls === 2) {
           assert.equal(input.coverage[0].failed, true);
           assert.equal(input.evidence[0].date, null);
-          return validate({ queries: [query('B dated price announcement', '2026-11-09')], read: [1] });
+          return validate({ queries: [query('B dated price announcement', '2026-11-09')] });
         }
         assert.equal(input.coverage.length, 4);
         assert.deepEqual(input.coverage[3].ids, []);

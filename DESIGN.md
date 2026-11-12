@@ -17,3 +17,5 @@ SQLite avoids a database service. Date and keyword lookup handles the challenge'
 ## What is verified and what comes next
 
 Deterministic tests cover restart recovery, duplicate requests, session scoping, dated retrieval, model failover after search, and a targeted follow-up with incomplete evidence. With another week, I would build a dated set of pricing and release changes, compare Exa and SearXNG on evidence coverage and p95 latency, and improve retrieval where the sources fall short.
+
+In live runs with seeded histories and SearXNG, all three sample prompts returned citations. Five searches in the CRM run failed, and the pricing recall run could not verify the base subscription price from the excerpts. A direct read of the official Supabase pricing page captured the $25 figure.
