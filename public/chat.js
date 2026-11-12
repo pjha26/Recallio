@@ -16,6 +16,19 @@ function showTurn(turn) {
     const answer = document.createElement('p');
     answer.textContent = turn.result.answer;
     article.append(answer);
+    if (turn.result.checklist?.length) {
+      const labels = { confirmed_change: 'Confirmed change', no_change_found: 'No change found in checked sources',
+        unable_to_verify: 'Unable to verify' };
+      const list = document.createElement('ul');
+      for (const check of turn.result.checklist) {
+        const item = document.createElement('li');
+        const citation = check.citation ? ' [' + check.citation + ']' : '';
+        item.textContent = check.vendor + ' · ' + (check.kind === 'pricing' ? 'Pricing' : 'Releases') +
+          ' · ' + labels[check.status] + citation;
+        list.append(item);
+      }
+      article.append(list);
+    }
     if (turn.result.sources.length) {
       const list = document.createElement('ul');
       for (const source of turn.result.sources) {

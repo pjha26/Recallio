@@ -17,6 +17,8 @@ const cases = [
 ];
 
 const web = process.argv.includes('--web');
+const repeat = Number(process.env.EVAL_RUNS || 1);
+if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10) throw new Error('EVAL_RUNS must be an integer from 1 to 10.');
 const providers = createProviders(process.env);
 if (!providers.available || (web && !providers.searchAvailable)) throw new Error('Configure a model key and, for --web, a search provider.');
 const fixtureProviders = {
@@ -40,14 +42,22 @@ const fixtureProviders = {
 };
 
 console.log(web ? 'Live web evidence' : 'Frozen synthetic evidence with live model');
-for (const { name, question, history: seed, entities } of cases) {
+const summaries = [];
+const scheduled = Array.from({ length: repeat }, (_, index) =>
+  cases.map(testCase => ({ ...testCase, run: index + 1 }))).flat();
+for (const { run, name, question, history: seed, entities } of scheduled) {
   const history = selectHistory([{ ...seed, chat: 'earlier', result: JSON.stringify({ answer: seed.answer }) }],
     'follow-up', question, zone, now);
   const start = performance.now();
   try {
     const result = await answerTurn({ question, history, zone, now, providers: web ? providers : fixtureProviders,
       progress() {}, signal: AbortSignal.timeout(42000) });
-    console.log(JSON.stringify({ name, elapsedMs: Math.round(performance.now() - start), unverified: Boolean(result.unverified),
+    const elapsedMs = Math.round(performance.now() - start);
+    const expected = entities.length * (name === 'CRM changes' ? 2 : 1);
+    const covered = result.checklist.filter(check => check.evidenceCount > 0).length;
+    const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
+    summaries.push({ name, elapsedMs, expected, covered, verified, checks: result.checklist.length, unverified: Boolean(result.unverified) });
+    console.log(JSON.stringify({ run, name, elapsedMs, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -56,7 +66,17 @@ for (const { name, question, history: seed, entities } of cases) {
       failures: result.coverage.filter(check => check.failed).map(({ query, reason }) => ({ query, reason })),
       sources: result.sources.map(({ id, url, text, pageText }) => ({ id, url, text, pageText })), answer: result.answer }));
   } catch (error) {
-    console.log(JSON.stringify({ name, elapsedMs: Math.round(performance.now() - start), error: error.message }));
+    summaries.push({ name, error: true });
+    console.log(JSON.stringify({ run, name, elapsedMs: Math.round(performance.now() - start), error: error.message }));
     process.exitCode = 1;
   }
+}
+for (const { name } of cases) {
+  const runs = summaries.filter(item => item.name === name);
+  const completed = runs.filter(item => !item.error);
+  const range = key => completed.length
+    ? [Math.min(...completed.map(item => item[key])), Math.max(...completed.map(item => item[key]))] : [];
+  console.log(JSON.stringify({ summary: name, runs: runs.length, errors: runs.length - completed.length,
+    expected: range('expected'), checks: range('checks'), covered: range('covered'), verified: range('verified'), elapsedMs: range('elapsedMs'),
+    rejectedSynthesis: completed.filter(item => item.unverified).length }));
 }
