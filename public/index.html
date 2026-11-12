@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recallio</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.55 system-ui, sans-serif; }
+    body { max-width: 720px; margin: 2.5rem auto; padding: 0 1rem 2rem; }
+    header, form { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+    h1 { margin: 0 auto 0 0; }
+    select { max-width: min(100%, 18rem); }
+    #messages article { padding: 1rem 0; border-bottom: 1px solid gray; }
+    article p { white-space: pre-wrap; overflow-wrap: anywhere; }
+    textarea { flex: 1; min-width: 12rem; min-height: 4rem; padding: .5rem; font: inherit; }
+    button, select { font: inherit; padding: .35rem .65rem; }
+    #status { min-height: 1.5em; }
+  </style>
+  <script type="module" src="/chat.js"></script>
+</head>
+<body>
+  <header><h1>Recallio</h1><select aria-label="Conversation"></select><button id="new">New chat</button></header>
+  <main>
+    <section id="messages" aria-label="Messages" aria-live="polite"></section>
+    <p id="status" role="status"></p>
+    <form><textarea aria-label="Message" placeholder="Ask about something we discussed" required maxlength="3000"></textarea><button type="submit">Send</button></form>
+  </main>
+</body>
+</html>
