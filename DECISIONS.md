@@ -9,10 +9,12 @@ This document records the implementation choices and what to build next. [DESIGN
 | Use Groq first and Gemini on failure | Both accept the same plans and evidence, so failover during synthesis can reuse completed searches. | Provider limits and output quality still vary. The app depends on the credentials supplied. |
 | Support SearXNG and Exa through one search adapter | SearXNG can run locally without search credits. Exa offers a setup without a Docker service. | Search rankings and excerpt coverage vary. Self-hosted SearXNG also depends on Docker and upstream engines. |
 | Bound the research loop | The server caps searches at 12 per turn, including the optional follow-up, and reads up to two result pages. | A broad comparison can still finish with gaps. A slow source can use up its share of the turn deadline. |
-| Validate citation IDs against retrieved URLs | The server can trace a displayed citation to a search result. | A real URL can still fail to support a claim. Historical changes require dated evidence or a reliable baseline. |
+| Validate citation IDs and supporting quotes | The server checks that quotes for declared price, release, and change claims appear in the cited evidence and contain appropriate signals. | These checks are heuristic. They do not verify every assertion or determine whether a source is authoritative. |
 
-## Next build steps
+## Evaluation and demo
 
-1. **Measure and improve multi-vendor coverage.** Turn the three hiring prompts into repeatable fixtures with seeded chats and known evidence. Record each vendor's outcome, provider failures, and response time. The live CRM run left five searches incomplete. Use the failure data to tune SearXNG timeouts or concurrency, and rerun the same fixtures to see whether coverage improves.
-2. **Evaluate whether citations support the claims.** Add cases for a base price versus a compute credit, a release announcement versus a ship date, and a current price without a historical baseline. Check the cited excerpt or page against the answer. Mark changes unverified when comparable, dated evidence is missing.
-3. **Package the hiring demo.** Verify setup from a fresh clone with the documented SearXNG configuration, prepare a sample history that shows recall across a restart, and update `DESIGN.md` with measured coverage and latency.
+1. **Measure multi-vendor coverage.** The evaluation reports per-vendor search and evidence counts. A four-worker queue starts another query as soon as a slot frees up. Citation order still follows the original plan. A slow query can no longer hold up the entire next batch.
+2. **Check cited evidence.** Tests cover a base price versus a compute credit, a preview versus a shipped release, and a current price without evidence of change. If model synthesis fails evidence validation, Recallio can return the checked links and explain that it could not verify the proposed answer.
+3. **Verify the hiring demo.** The demo starts two successive local server processes with the same isolated SQLite database and session cookie. A stubbed model returns the retrieved answer so the check measures persistence and retrieval without provider availability affecting the outcome.
+
+Further work should measure the spread across multiple live runs and improve retrieval of first-party, dated sources when current pages establish only present-day terms.

@@ -17,6 +17,7 @@ function publicLookup(host, options, callback) {
 export function extractPageEvidence(html) {
   const $ = load(html);
   $('script, style, noscript, template, nav, footer, svg, [hidden]').remove();
+  $('article, section, div, p, li, h1, h2, h3, h4, dt, dd, br').after(' ');
   const root = $('main').first();
   const content = (root.length ? root : $('body')).text().replace(/\s+/g, ' ').trim();
   const details = [...content.matchAll(/(?:[$€£]\s*\d|\b(?:USD|EUR|GBP)\s*\d|\b(?:effective|released|takes effect|per month|per year)\b)/gi)];

@@ -8,7 +8,10 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "eval": "node --env-file-if-exists=.env scripts/evaluate.js",
+    "eval:web": "node --env-file-if-exists=.env scripts/evaluate.js --web",
+    "demo": "node scripts/demo.js"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

@@ -72,8 +72,10 @@ export function createProviders(env) {
       if (endpoint) {
         const url = new URL(endpoint);
         url.search = new URLSearchParams({ q: query, format: 'json', categories: 'general' });
-        data = await json(url, { signal: timeout(signal, 4500) });
-        if (!data.results?.length && data.unresponsive_engines?.length) throw new Error('Search engines unavailable');
+        data = await json(url, { signal: timeout(signal, 5500) });
+        if (!data.results?.length && data.unresponsive_engines?.length) {
+          throw Object.assign(new Error('Search engines unavailable'), { code: 'upstream-engines' });
+        }
       } else {
         if (!env.EXA_API_KEY) throw new Error('Web search is unconfigured');
         data = await json('https://api.exa.ai/search', {

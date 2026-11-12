@@ -3,6 +3,41 @@ import assert from 'node:assert/strict';
 import { selectHistory, answerTurn } from '../src/agent.js';
 import { createProviders } from '../src/providers.js';
 
+test('a slow query does not block later searches or change citation order', async () => {
+  let release;
+  const slow = new Promise(resolve => { release = resolve; });
+  const queries = Array.from({ length: 5 }, (_, i) => ({ query: 'Vendor ' + i, objective: 'Find evidence', since: null }));
+  let fifthStarted = false;
+  let active = 0;
+  let peak = 0;
+  const result = await answerTurn({
+    question: 'Check five vendors', history: [], zone: 'UTC', now: '2026-11-12T12:00:00Z',
+    progress() {}, signal: AbortSignal.timeout(2000),
+    providers: {
+      async search(query, _objective, _since, signal) {
+        active++;
+        peak = Math.max(peak, active);
+        if (query === 'Vendor 0') {
+          await Promise.race([slow, new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))]);
+          assert.equal(fifthStarted, true);
+        }
+        if (query === 'Vendor 4') {
+          fifthStarted = true;
+          release();
+        }
+        active--;
+        return [{ url: 'https://example.com/' + query.at(-1), title: query, text: query }];
+      },
+      async model(_prompt, input, validate) {
+        if (!input.evidence) return validate({ queries, focus: 'coverage', review: false });
+        return validate({ answer: 'Sources [1, 5]', citations: [], checks: [] });
+      },
+    },
+  });
+  assert.ok(peak <= 4);
+  assert.deepEqual(result.sources.map(source => source.title), ['Vendor 0', 'Vendor 4']);
+});
+
 test('a dated turn outranks newer unrelated conversations', () => {
   const makeTurn = (created, question) => ({ chat: 'old', created, question, result: JSON.stringify({ answer: 'Original answer' }) });
   const history = [makeTurn('2026-11-11T12:00:00Z', 'Another question'), makeTurn('2026-11-03T12:00:00Z', 'Postgres hosting?')];
@@ -33,7 +68,7 @@ test('Gemini completes the answer using existing evidence after Groq fails', asy
     if (host === 'api.groq.com') return new Response('', { status: 503 });
     assert.match(body, /current price is/);
     return Response.json({ candidates: [{ content: { parts: [{
-      text: JSON.stringify({ answer: 'The current price is $20 [1]. I could not verify the historical price.', citations: [1] }),
+      text: JSON.stringify({ answer: 'The current price is $20 [1]. I could not verify the historical price.', citations: [1], checks: [] }),
     }] } }] });
   });
   const result = await answerTurn({ question: 'Has pricing changed?', history: [], zone: 'UTC',
@@ -73,7 +108,8 @@ test('one follow-up targets missing dated evidence and preserves verified result
         assert.deepEqual(input.coverage[3].ids, []);
         assert.equal(input.evidence[1].domain, 'c.example');
         assert.equal(input.evidence[0].pageText, 'Pro costs $20 per month.');
-        return validate({ answer: 'C changed on November 11 [2]. I could not verify changes for A or B.', citations: [2] });
+        return validate({ answer: 'C changed on November 11 [2]. I could not verify changes for A or B.', citations: [2],
+          checks: [{ kind: 'price_change', id: 2, quote: 'The new price took effect on November 11.' }] });
       },
       async readPage(url) {
         assert.equal(url, 'https://b.example/pricing');

@@ -97,6 +97,16 @@ Open [a test JSON search](http://127.0.0.1:43193/search?q=Supabase+pricing&forma
 
 Run `npm test` for the SQLite recovery and mocked-provider tests. These tests need no keys.
 
+## Evaluation and hiring demo
+
+| Command | What it runs |
+| --- | --- |
+| `npm run eval` | The three hiring prompts with seeded chat history, fixed synthetic search results, and your configured model. The CRM fixture includes a timeout, a preview, a shipped release, and a price change. |
+| `npm run eval:web` | The same prompts with live search. Each report includes elapsed time, per-vendor search coverage, failure reasons, cited evidence, and the answer for review. |
+| `npm run demo` | Starts a temporary local server, seeds a chat, restarts the server, and asks from a new chat in the same session. It verifies recall through the HTTP API with a stubbed model and removes its temporary database afterwards. |
+
+The evaluation commands need a model key. The live web evaluation also needs SearXNG or Exa. The restart demo needs no keys. Fixture prices and releases are synthetic. Live results vary with upstream search availability and model output.
+
 ## Troubleshooting
 
 | Symptom | Check |
