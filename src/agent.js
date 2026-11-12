@@ -29,6 +29,7 @@ const searchBudget = 12;
 const planPrompt = `Return JSON only, with queries (array of {query, objective, since}), focus (short string), and review (boolean).
 Each query and objective is a required string. objective: Goal for this search turn; say which documents should rank first, which should be excluded, and what specific facts or figures to pull from them.
 Use [] for normal chat, questions answerable from history, and necessary clarifications.
+When the user asks what they previously asked AND whether the old answer is still correct, use history for recall and always plan a current web search for verifiable claims in the matched answer.
 For current facts and verification, make targeted public queries for each named item. Cover both price and releases when asked.
 Use official vendor pricing and changelogs. Use since (YYYY-MM-DD) only for events in a bounded window the user asked to enforce. Use null for current pricing and general recency; express general recency in the query.
 Resolve relative dates using the local calendar and match them to the supplied history. When the user asks what changed since a prior discussion, use the matched turn's date as the start of the comparison and include it in dated queries. Retrieve exact entities from prior messages. If the matching date or entities are missing or ambiguous, ask for clarification instead of inventing.
