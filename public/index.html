@@ -18,14 +18,16 @@
   <main>
     <div class="chat-space">
       <section id="welcome" aria-labelledby="welcome-title">
-        <div class="art"><img src="/terminal.png" width="280" height="280" alt=""></div>
-        <h2 id="welcome-title">What changed?</h2>
-        <p>Pick up an earlier conversation and check what’s changed on the web.</p>
-        <div class="suggestions" aria-label="Suggested questions">
-          <button type="button" data-prompt="Has pricing changed for any of the products we discussed?">Check pricing changes</button>
-          <button type="button" data-prompt="What did we discuss in my previous chat, and is your answer still correct today?">Verify an earlier answer</button>
-          <button type="button" data-prompt="Has any vendor on our shortlist changed pricing or shipped a major release?">Review a vendor shortlist</button>
+        <div class="welcome-copy">
+          <h2 id="welcome-title">What changed?</h2>
+          <p>Pick up an earlier conversation and check what’s changed on the web.</p>
+          <div class="suggestions" aria-label="Suggested questions">
+            <button type="button" data-prompt="Has pricing changed for any of the products we discussed?">Check pricing changes</button>
+            <button type="button" data-prompt="What did we discuss in my previous chat, and is your answer still correct today?">Verify an earlier answer</button>
+            <button type="button" data-prompt="Has any vendor on our shortlist changed pricing or shipped a major release?">Review a vendor shortlist</button>
+          </div>
         </div>
+        <div class="art"><img src="/terminal.png" width="440" height="440" alt=""></div>
       </section>
       <section id="messages" aria-label="Messages" aria-live="polite" hidden></section>
     </div>

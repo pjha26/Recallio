@@ -91,6 +91,8 @@ Open [a test JSON search](http://127.0.0.1:43193/search?q=Supabase+pricing&forma
 
 ## Check conversation recall
 
+To test the UI, select **Check pricing changes** on a new chat and verify that it fills the composer. Edit the text or clear it before following the steps below. After sending a message, check that the reply, any vendor statuses, and any source links are readable. Use **New chat** and the **Conversation** menu to switch between a new and saved chat. On a narrow window, check that the composer and Send button remain usable.
+
 1. Ask “Compare the entry-level Postgres hosting plans from Neon and Supabase for a small app.”
 2. Restart Recallio, choose **New chat**, and ask “What did we conclude about Postgres hosting, and has any pricing changed since?”
 3. Check that the answer recalls the earlier comparison, links to evidence, and calls out any missing historical baseline.
