@@ -158,4 +158,3 @@ test('one follow-up targets missing dated evidence and preserves verified result
   assert.equal(result.sources[0].url, 'https://c.example/pricing');
   assert.match(result.answer, /could not verify changes for A or B/);
 });
-

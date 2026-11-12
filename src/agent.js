@@ -285,4 +285,3 @@ export function validateEvidenceChecks(checks, citations, evidence) {
     if (supported[kind] !== true) throw new Error('Quote does not support the evidence check');
   }
 }
-

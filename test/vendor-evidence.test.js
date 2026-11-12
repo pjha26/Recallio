@@ -57,4 +57,3 @@ test('no-change statements need a known comparison start', () => {
   assert.equal(summarizeChecks(checks, coverage, source, null, today)[0].status, 'unable_to_verify');
   assert.equal(summarizeChecks(checks, coverage, source, since, today)[0].status, 'no_change_found');
 });
-

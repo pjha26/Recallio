@@ -82,4 +82,3 @@ for (const { name } of cases) {
     expected: range('expected'), checks: range('checks'), covered: range('covered'), verified: range('verified'), elapsedMs: range('elapsedMs'),
     rejectedSynthesis: completed.filter(item => item.unverified).length }));
 }
-

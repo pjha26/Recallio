@@ -79,4 +79,3 @@ export function summarizeChecks(checklist, coverage, sources, since, today) {
       status: 'unable_to_verify', ...finding };
   });
 }
-

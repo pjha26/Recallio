@@ -57,4 +57,3 @@ test('an unresolved checklist cannot be contradicted by a no-change summary', as
   assert.match(result.answer, /does not mean nothing changed/);
   assert.equal(result.checklist[0].status, 'unable_to_verify');
 });
-
