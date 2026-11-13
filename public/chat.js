@@ -11,8 +11,11 @@ const suggestions = [...welcome.querySelectorAll('[data-prompt]')];
 const form = document.querySelector('form');
 const input = form.querySelector('textarea');
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-let chat = sessionStorage.getItem('recallio-chat') || crypto.randomUUID();
+let chat;
+try { chat = sessionStorage.getItem('recallio-chat'); } catch { /* Storage can be disabled by browser policy. */ }
+chat ||= crypto.randomUUID();
 let pending = false;
+let refreshTimer;
 
 function setVioletTheme(enabled) {
   document.documentElement.dataset.theme = enabled ? 'violet' : 'arcade';
@@ -89,7 +92,7 @@ async function refresh() {
   const response = await fetch('/api/history?chat=' + encodeURIComponent(chat));
   if (!response.ok) throw new Error('Could not load the conversation.');
   const data = await response.json();
-  sessionStorage.setItem('recallio-chat', chat);
+  try { sessionStorage.setItem('recallio-chat', chat); } catch { /* Keep the current chat in memory. */ }
   select.replaceChildren(...data.chats.map(item => new Option(item.title.slice(0, 65), item.id)));
   if (!data.chats.some(item => item.id === chat)) {
     select.add(new Option(data.chats.length ? 'New conversation' : 'Conversation', chat));
@@ -100,6 +103,10 @@ async function refresh() {
   welcome.hidden = data.turns.length > 0;
   messages.hidden = !welcome.hidden;
   if (!data.configured && !status.textContent) status.textContent = 'Add your model and search settings in .env for live research.';
+  clearTimeout(refreshTimer);
+  if (data.turns.some(turn => turn.state === 'running')) {
+    refreshTimer = setTimeout(() => refresh().catch(error => { status.textContent = error.message; }), 1500);
+  }
 }
 
 async function sendTurn(turn) {
