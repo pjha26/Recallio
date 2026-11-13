@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isOfficial, summarizeChecks } from '../src/vendor-evidence.js';
+import { isOfficial, officialDomain, rankSources, summarizeChecks } from '../src/vendor-evidence.js';
 
 const since = '2026-11-09';
 const today = '2026-11-13';
@@ -48,6 +48,21 @@ test('future, stale, undated, and ambiguous evidence stays unresolved', () => {
 test('official host matching rejects lookalike domains', () => {
   assert.equal(isOfficial({ url: 'https://support.hubspot.com/pricing' }, 'hubspot.com'), true);
   assert.equal(isOfficial({ url: 'https://hubspot.com.attacker.test/' }, 'hubspot.com'), false);
+});
+
+test('CRM aliases map to first-party hosts and relevant pages rank first', () => {
+  assert.equal(officialDomain('Attio CRM'), 'attio.com');
+  assert.equal(officialDomain('Close CRM'), 'close.com');
+  assert.equal(officialDomain('Copper CRM'), 'copper.com');
+  assert.equal(officialDomain('Insightly CRM'), 'insightly.com');
+  const results = rankSources([
+    { url: 'https://close.com/', title: 'Close CRM' },
+    { url: 'https://blog.example.test/pricing', title: 'Pricing changes' },
+    { url: 'https://close.com/pricing', title: 'Plans and pricing' },
+  ], 'close.com', 'pricing');
+  assert.deepEqual(results.map(({ url }) => url), [
+    'https://close.com/pricing', 'https://close.com/', 'https://blog.example.test/pricing',
+  ]);
 });
 
 test('no-change statements need a known comparison start', () => {

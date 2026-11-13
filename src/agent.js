@@ -1,4 +1,4 @@
-import { isOfficial, officialDomain, summarizeChecks } from './vendor-evidence.js';
+import { isOfficial, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 const day = (iso, zone) => new Intl.DateTimeFormat('en-CA', { timeZone: zone, dateStyle: 'short' }).format(new Date(iso));
@@ -133,8 +133,8 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   }
 
   function addResult({ query, target, matches, failed, reason }) {
-    const domain = officialDomain(plan.checklist.find(check => check.target === target)?.vendor ?? '');
-    const ranked = matches.toSorted((a, b) => Number(isOfficial(b, domain)) - Number(isOfficial(a, domain)));
+    const check = plan.checklist.find(item => item.target === target);
+    const ranked = rankSources(matches, officialDomain(check?.vendor ?? ''), check?.kind);
     const ids = ranked.slice(0, 2).map(source => {
       let index = evidence.findIndex(item => item.url === source.url);
       if (index === -1) {

@@ -4,6 +4,10 @@ const domains = {
   pipedrive: 'pipedrive.com',
   'zoho crm': 'zoho.com',
   freshsales: 'freshworks.com',
+  attio: 'attio.com',
+  close: 'close.com',
+  copper: 'copper.com',
+  insightly: 'insightly.com',
   supabase: 'supabase.com',
   neon: 'neon.tech',
 };
@@ -15,6 +19,9 @@ export function officialDomain(vendor) {
   if (name.startsWith('salesforce ')) return domains.salesforce;
   if (name.startsWith('hubspot ')) return domains.hubspot;
   if (name.startsWith('freshsales ')) return domains.freshsales;
+  for (const vendor of ['attio', 'close', 'copper', 'insightly']) {
+    if (name.startsWith(vendor + ' ')) return domains[vendor];
+  }
   return undefined;
 }
 
@@ -22,6 +29,16 @@ export function isOfficial(source, domain) {
   if (!domain || !source) return false;
   const { hostname } = new URL(source.url);
   return hostname === domain || hostname.endsWith('.' + domain);
+}
+
+export function rankSources(sources, domain, kind) {
+  const relevant = kind === 'pricing' ? /pricing|plans|billing|subscription|prices?/i :
+    kind === 'release' ? /changelog|releases?|product updates?|what.s new/i : null;
+  return sources.toSorted((a, b) => {
+    const score = source => Number(isOfficial(source, domain)) * 2 +
+      Number(relevant?.test(new URL(source.url).pathname + ' ' + source.title) ?? false);
+    return score(b) - score(a);
+  });
 }
 
 const months = 'january february march april may june july august september october november december'.split(' ');
