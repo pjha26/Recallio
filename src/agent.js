@@ -92,7 +92,7 @@ function readPlan(value, history) {
     }
   }
   if (checklist.length >= searchBudget) throw new Error('Checklist exceeds search budget');
-  const since = history.find(turn => turn.timestamp === value.baseline)?.timestamp?.slice(0, 10);
+  const since = history.find(turn => turn.timestamp === value.baseline)?.date;
   const initial = checklist.map(({ target, vendor, kind }) => ({
     target, since: null,
     query: vendor + (kind === 'pricing' ? ' official pricing plans' : ' official changelog shipped releases') +
@@ -125,9 +125,12 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       const matches = await providers.search(query, objective, date, searchSignal);
       return { query, target, matches, failed: false };
     } catch (error) {
+      const code = error.code ?? error.cause?.code;
       const reason = searchSignal.aborted ? 'deadline' :
         error.name === 'TimeoutError' || error.name === 'AbortError' ? 'timeout' :
-          error.status ? 'http-' + error.status : error.code === 'upstream-engines' ? error.code : 'provider';
+          error.status ? 'http-' + error.status :
+            code === 'upstream-engines' ? code :
+              code === 'ECONNREFUSED' ? 'connection-refused' : 'provider';
       return { query, target, matches: [], failed: true, reason };
     }
   }

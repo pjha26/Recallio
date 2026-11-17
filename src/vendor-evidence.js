@@ -47,7 +47,7 @@ const datePattern = new RegExp(
   '\\b(20\\d{2}-\\d{2}-\\d{2})\\b|\\b(' + namedMonth + ')\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(20\\d{2})\\b' +
   '|\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(' + namedMonth + ')\\s+(20\\d{2})\\b', 'gi');
 
-function explicitDate(text) {
+function explicitDates(text) {
   const dates = new Set();
   for (const [, iso, monthFirst, daySecond, yearFirst, dayFirst, monthSecond, yearSecond] of text.matchAll(datePattern)) {
     const month = monthFirst ?? monthSecond;
@@ -59,27 +59,34 @@ function explicitDate(text) {
     const parsed = new Date(date);
     if (Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === date) dates.add(date);
   }
-  return dates.size === 1 ? dates.values().next().value : undefined;
+  return [...dates];
 }
 
-function eventFrom(source, kind, since, today) {
+function eventsFrom(source, kind, since, today) {
+  const events = [];
   const candidates = [source.text, source.pageText ?? ''].flatMap(text =>
     text.split(/\r?\n|(?<=[.!?])\s+/).map(quote => quote.trim()));
   for (const quote of candidates) {
     if (!quote || quote.length > 700 || /\b(?:preview|beta|planned|upcoming|expected|will|would|may|might|not yet)\b/i.test(quote)) continue;
-    const date = explicitDate(quote);
-    if (!date || date > today || (since && date < since)) continue;
+    const dates = explicitDates(quote);
     const unchanged = kind === 'pricing'
-      ? /\b(?:pricing|prices?|subscription (?:rates?|fees?))\s+(?:(?:has|have|will|did|was|were)\s+)?(?:remains? unchanged|unchanged|not changed|not change|stayed the same)\b/i
+      ? /\b(?:pricing|prices?|subscription (?:rates?|fees?))\s+(?:(?:has|have|did|was|were)\s+)?(?:remain(?:s|ed)? unchanged|unchanged|not changed|not change|stayed the same)\b/i
       : /\bno (?:major |new )?(?:releases?|versions?) (?:shipped|launched|were released)\b/i;
-    if (since && unchanged.test(quote)) return { status: 'no_change_found', date, quote };
+    const interval = /\bfrom (.+?) (?:through|to) (.+)$/i.exec(quote);
+    if (since && unchanged.test(quote) && interval && dates.length === 2 &&
+        explicitDates(interval[1])[0] === since && explicitDates(interval[2])[0] === today) {
+      events.push({ status: 'no_change_found', date: today, quote });
+      continue;
+    }
+    const [date] = dates;
+    if (dates.length !== 1 || date > today || (since && date < since)) continue;
     if (/\b(?:no|not|never|unchanged|didn['’]t|hasn['’]t|without)\b/i.test(quote)) continue;
     const changed = kind === 'pricing'
       ? /\b(?:pricing|prices?|subscription (?:rates?|fees?))\s+(?:(?:has|have|was|were)\s+)?(?:changed|increased|decreased|rose|fell|raised|lowered)\b|\b(?:new|updated) (?:prices?|pricing)\s+(?:took effect|became effective)\b/i
       : /\b(?:shipped|launched|was released|were released|went live|became generally available|is now generally available)\b/i;
-    if (changed.test(quote)) return { status: 'confirmed_change', date, quote };
+    if (changed.test(quote)) events.push({ status: 'confirmed_change', date, quote });
   }
-  return undefined;
+  return events;
 }
 
 export function summarizeChecks(checklist, coverage, sources, since, today) {
@@ -87,8 +94,7 @@ export function summarizeChecks(checklist, coverage, sources, since, today) {
     const ids = [...new Set(coverage.filter(item => item.target === check.target).flatMap(item => item.ids))];
     const official = ids.filter(id => isOfficial(sources[id - 1], officialDomain(check.vendor)));
     const findings = official.flatMap(id => {
-      const event = eventFrom(sources[id - 1], check.kind, since, today);
-      return event ? [{ ...event, citation: id }] : [];
+      return eventsFrom(sources[id - 1], check.kind, since, today).map(event => ({ ...event, citation: id }));
     });
     const consistent = new Set(findings.map(finding => finding.status)).size === 1;
     const finding = consistent ? findings[0] : undefined;

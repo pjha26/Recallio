@@ -18,12 +18,12 @@ test('only dated in-window first-party statements establish a change or no chang
     { url: 'https://salesforce.com/releases', text: 'Version 4 preview announced on November 11, 2026; general availability is planned.' },
     { url: 'https://pipedrive-support.com/pricing', text: 'The subscription price increased on November 11, 2026.' },
     { url: 'https://zoho.com/crm/updates', text: 'No new releases shipped on November 12, 2026.' },
-    { url: 'https://freshworks.com/pricing', text: 'Pricing remains unchanged as of November 12, 2026.' },
+    { url: 'https://freshworks.com/pricing', text: 'Pricing remained unchanged from November 9, 2026 through November 13, 2026.' },
   ];
   const coverage = checklist.map(check => ({ target: check.target, ids: [check.target], failed: false }));
   const results = summarizeChecks(checklist, coverage, sources, since, today);
   assert.deepEqual(results.map(({ status }) => status), [
-    'confirmed_change', 'unable_to_verify', 'unable_to_verify', 'no_change_found', 'no_change_found',
+    'confirmed_change', 'unable_to_verify', 'unable_to_verify', 'unable_to_verify', 'no_change_found',
   ]);
   assert.equal(results[0].date, '2026-11-11');
   assert.equal(results[0].citation, 1);
@@ -65,10 +65,13 @@ test('CRM aliases map to first-party hosts and relevant pages rank first', () =>
   ]);
 });
 
-test('no-change statements need a known comparison start', () => {
+test('no-change statements must cover the full window and agree with other passages', () => {
   const checks = [{ target: 1, vendor: 'HubSpot', kind: 'pricing' }];
   const coverage = [{ target: 1, ids: [1] }];
-  const source = [{ url: 'https://hubspot.com/pricing', text: 'Pricing remains unchanged as of November 12, 2026.' }];
+  const source = [{ url: 'https://hubspot.com/pricing', text: 'Pricing remains unchanged from November 9, 2026 through November 13, 2026.' }];
   assert.equal(summarizeChecks(checks, coverage, source, null, today)[0].status, 'unable_to_verify');
   assert.equal(summarizeChecks(checks, coverage, source, since, today)[0].status, 'no_change_found');
+  assert.equal(summarizeChecks(checks, coverage, source, '2026-11-08', today)[0].status, 'unable_to_verify');
+  source[0].pageText = 'Pricing increased on November 12, 2026.';
+  assert.equal(summarizeChecks(checks, coverage, source, since, today)[0].status, 'unable_to_verify');
 });

@@ -57,9 +57,12 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     const elapsedMs = Math.round(performance.now() - start);
     const expected = entities.length * (name === 'CRM changes' ? 2 : 1);
     const covered = result.checklist.filter(check => check.evidenceCount > 0).length;
+    const official = result.checklist.filter(check => check.officialEvidenceCount > 0).length;
+    const missingEvidence = web && !result.coverage.some(check => check.ids.length);
+    if (missingEvidence) process.exitCode = 1;
     const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
-    summaries.push({ name, elapsedMs, expected, covered, verified, checks: result.checklist.length, unverified: Boolean(result.unverified) });
-    console.log(JSON.stringify({ run, name, elapsedMs, unverified: Boolean(result.unverified), checklist: result.checklist,
+    summaries.push({ name, elapsedMs, expected, covered, official, verified, missingEvidence, checks: result.checklist.length, unverified: Boolean(result.unverified) });
+    console.log(JSON.stringify({ run, name, elapsedMs, missingEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -79,6 +82,7 @@ for (const { name } of cases) {
   const range = key => completed.length
     ? [Math.min(...completed.map(item => item[key])), Math.max(...completed.map(item => item[key]))] : [];
   console.log(JSON.stringify({ summary: name, runs: runs.length, errors: runs.length - completed.length,
-    expected: range('expected'), checks: range('checks'), covered: range('covered'), verified: range('verified'), elapsedMs: range('elapsedMs'),
+    expected: range('expected'), checks: range('checks'), covered: range('covered'), official: range('official'),
+    verified: range('verified'), elapsedMs: range('elapsedMs'), withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
     rejectedSynthesis: completed.filter(item => item.unverified).length }));
 }
