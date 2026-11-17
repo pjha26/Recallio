@@ -8,6 +8,7 @@ test('five vendors get separate checks, one retry, and evidence-scoped statuses'
   const vendors = ['HubSpot', 'Salesforce', 'Pipedrive', 'Zoho CRM', 'Freshsales'];
   const searched = [];
   let pipedriveFailed = false;
+  let modelSteps = 0;
   const dated = 'Version 4 shipped on November 11, 2026.';
   const result = await answerTurn({
     question: 'Did the five CRM vendors change pricing or ship releases?', history: [], zone: 'UTC',
@@ -25,14 +26,16 @@ test('five vendors get separate checks, one retry, and evidence-scoped statuses'
           title: query, text: release ? dated : 'The current subscription starts at $25 per month.' }];
       },
       async model(_prompt, input, validate) {
+        modelSteps++;
         if (!input.evidence) return validate({ focus: 'CRM checks', queries: [], review: true,
           targets: vendors.map(vendor => ({ vendor, kinds: ['pricing', 'release'] })) });
-        if (input.coverage.length === 10) return validate({ queries: [] });
         return validate({ answer: 'I checked the official pages.', citations: [], checks: [] });
       },
     },
   });
   assert.equal(searched.length, 11);
+  assert.equal(modelSteps, 2);
+  assert.match(searched.at(-1), /^Pipedrive/);
   assert.equal(result.checklist.length, 10);
   assert.deepEqual(result.checklist.filter(check => check.status === 'confirmed_change').map(check => check.target), [2, 4, 6, 8, 10]);
   assert.equal(result.checklist.find(check => check.target === 5).status, 'unable_to_verify');
@@ -92,7 +95,7 @@ test('Gemini completes the answer using existing evidence after Groq fails', asy
         contents: { highlights: true },
       });
       return Response.json({
-      results: [{ url: 'https://example.com/pricing', title: 'Official pricing', highlights: ['The current price is $20.'] }],
+      results: [{ url: 'https://example.com/pricing', title: 'Official pricing', highlights: ['The Pro plan starts at $20 per month.'] }],
       });
     }
     if (host === 'api.groq.com' && calls.length === 1) return groq({
@@ -101,9 +104,10 @@ test('Gemini completes the answer using existing evidence after Groq fails', asy
       }],
     });
     if (host === 'api.groq.com') return new Response('', { status: 503 });
-    assert.match(body, /current price is/);
+    assert.match(body, /Pro plan starts at/);
     return Response.json({ candidates: [{ content: { parts: [{
-      text: JSON.stringify({ answer: 'The current price is $20 [1]. I could not verify the historical price.', citations: [1], checks: [] }),
+      text: JSON.stringify({ answer: 'The Pro plan starts at $20 per month [1]. I could not verify the historical price.',
+        citations: [1], checks: [{ kind: 'base_price', id: 1, quote: 'The Pro plan starts at $20 per month.' }] }),
     }] } }] });
   });
   const result = await answerTurn({ question: 'Has pricing changed?', history: [], zone: 'UTC',

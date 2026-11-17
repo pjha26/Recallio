@@ -51,8 +51,13 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
   const history = selectHistory([{ ...seed, chat: 'earlier', result: JSON.stringify({ answer: seed.answer }) }],
     'follow-up', question, zone, now);
   const start = performance.now();
+  const selected = web ? providers : fixtureProviders;
+  let modelSteps = 0;
   try {
-    const result = await answerTurn({ question, history, zone, now, providers: web ? providers : fixtureProviders,
+    const result = await answerTurn({ question, history, zone, now, providers: { ...selected, model(...args) {
+      modelSteps++;
+      return selected.model(...args);
+    } },
       progress() {}, signal: AbortSignal.timeout(42000) });
     const elapsedMs = Math.round(performance.now() - start);
     const expected = entities.length * (name === 'CRM changes' ? 2 : 1);
@@ -61,8 +66,8 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     const missingEvidence = web && !result.coverage.some(check => check.ids.length);
     if (missingEvidence) process.exitCode = 1;
     const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
-    summaries.push({ name, elapsedMs, expected, covered, official, verified, missingEvidence, checks: result.checklist.length, unverified: Boolean(result.unverified) });
-    console.log(JSON.stringify({ run, name, elapsedMs, missingEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
+    summaries.push({ name, elapsedMs, modelSteps, expected, covered, official, verified, missingEvidence, checks: result.checklist.length, unverified: Boolean(result.unverified) });
+    console.log(JSON.stringify({ run, name, elapsedMs, modelSteps, missingEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -83,6 +88,7 @@ for (const { name } of cases) {
     ? [Math.min(...completed.map(item => item[key])), Math.max(...completed.map(item => item[key]))] : [];
   console.log(JSON.stringify({ summary: name, runs: runs.length, errors: runs.length - completed.length,
     expected: range('expected'), checks: range('checks'), covered: range('covered'), official: range('official'),
-    verified: range('verified'), elapsedMs: range('elapsedMs'), withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
-    rejectedSynthesis: completed.filter(item => item.unverified).length }));
+    verified: range('verified'), elapsedMs: range('elapsedMs'), modelSteps: range('modelSteps'),
+    withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
+    fallbackAnswers: completed.filter(item => item.unverified).length }));
 }

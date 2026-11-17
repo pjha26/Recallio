@@ -111,7 +111,7 @@ The evaluation commands need a model key. The live web evaluation also needs Sea
 
 The live evaluation exits with an error if a prompt retrieves no web evidence. Read its failure reasons and official source coverage before treating a completed model response as a successful search.
 
-In PowerShell, set `$env:EVAL_RUNS = '3'` before an evaluation to repeat each prompt three times. The summary reports ranges for checklist coverage, verified outcomes, and latency. Run `Remove-Item Env:EVAL_RUNS` to restore the default of one run.
+In PowerShell, set `$env:EVAL_RUNS = '3'` before an evaluation to repeat each prompt three times. The summary reports ranges for checklist coverage, verified outcomes, elapsed time, and model steps. It also counts fallback answers. Run `Remove-Item Env:EVAL_RUNS` to restore the default of one run.
 
 For vendor research, Recallio builds separate pricing and release checks and shows a status for each. When both model keys are configured, Groq goes first and Gemini can continue a failed model step with the same history and evidence. Search still depends on the configured search service.
 

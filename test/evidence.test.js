@@ -54,6 +54,73 @@ test('an unresolved checklist cannot be contradicted by a no-change summary', as
     },
   });
   assert.equal(result.unverified, true);
-  assert.match(result.answer, /does not mean nothing changed/);
+  assert.match(result.answer, /couldn’t verify this check/);
   assert.equal(result.checklist[0].status, 'unable_to_verify');
+});
+
+test('partial search excerpts cannot support a claim about missing changelog entries', async () => {
+  const result = await answerTurn({
+    question: 'Did HubSpot ship anything since Monday?', history: [], zone: 'UTC',
+    now: '2026-11-12T15:00:00Z', progress() {}, signal: new AbortController().signal,
+    providers: {
+      async search() {
+        return [{ url: 'https://hubspot.com/changelog', title: 'Changelog', text: 'Recent product updates.' }];
+      },
+      async model(prompt, input, validate) {
+        if (!input.evidence) return validate({ focus: 'Product updates', review: true, queries: [],
+          targets: [{ vendor: 'HubSpot', kinds: ['release'] }] });
+        if (prompt.startsWith('Return JSON only with a queries array')) return validate({ queries: [] });
+        return validate({ answer: 'The changelog does not contain entries for that period [1].', citations: [1], checks: [] });
+      },
+    },
+  });
+  assert.equal(result.unverified, true);
+  assert.equal(result.checklist[0].status, 'unable_to_verify');
+  assert.doesNotMatch(result.answer, /does not contain entries/);
+});
+
+test('a valid quote cannot support a different amount in the answer', async () => {
+  const quote = 'The Pro subscription starts at USD 25.00 per month.';
+  for (const [amount, usedFallback] of [['$25', false], ['$250', true]]) {
+    const result = await answerTurn({
+      question: 'What does Pro cost?', history: [], zone: 'UTC', now: '2026-11-12T15:00:00Z',
+      progress() {}, signal: new AbortController().signal,
+      providers: {
+        async search() { return [{ url: 'https://example.com/pricing', title: 'Pricing', text: quote }]; },
+        async model(_prompt, input, validate) {
+          if (!input.evidence) return validate({ focus: 'Pro price', review: false,
+            queries: [{ query: 'Pro pricing', objective: 'Find subscription price', since: null }] });
+          return validate({ answer: `The Pro subscription starts at ${amount} per month [1].`, citations: [1],
+            checks: [{ kind: 'base_price', id: 1, quote }] });
+        },
+      },
+    });
+    assert.equal(Boolean(result.unverified), usedFallback);
+    assert.equal(result.answer.includes(amount), !usedFallback);
+  }
+});
+
+test('when search fails, the fallback recalls the matched question without inventing current facts', async () => {
+  const prior = { timestamp: '2026-11-03T12:00:00Z', date: '2026-11-03',
+    question: 'What does the Supabase Pro plan cost?', answer: 'It costs $25.' };
+  let synthesisCalls = 0;
+  const result = await answerTurn({
+    question: 'What did I ask on 3 November? Is your answer still correct?', history: [prior], zone: 'UTC',
+    now: '2026-11-12T15:00:00Z', progress() {}, signal: new AbortController().signal,
+    providers: {
+      async search() { throw new Error('Search unavailable'); },
+      async model(prompt, input, validate) {
+        if (!input.evidence) return validate({ focus: 'Recall and verify', queries: [], review: true,
+          baseline: prior.timestamp, targets: [{ vendor: 'Supabase', kinds: ['pricing'] }] });
+        if (prompt.startsWith('Return JSON only with a queries array')) return validate({ queries: [] });
+        synthesisCalls++;
+        throw new Error('Synthesis should be skipped');
+      },
+    },
+  });
+  assert.equal(synthesisCalls, 0);
+  assert.ok(result.answer.includes(prior.question));
+  assert.match(result.answer, /Web search failed/);
+  assert.doesNotMatch(result.answer, /\$25/);
+  assert.deepEqual(result.sources, []);
 });
