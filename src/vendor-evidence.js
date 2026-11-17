@@ -12,14 +12,15 @@ const domains = {
   neon: 'neon.tech',
 };
 
-const pricingPages = {
-  'zoho crm': 'https://www.zoho.com/crm/zohocrm-pricing.html',
-  supabase: 'https://supabase.com/pricing',
+const officialPages = {
+  'zoho crm': { pricing: 'https://www.zoho.com/crm/zohocrm-pricing.html' },
+  pipedrive: { release: 'https://www.pipedrive.com/en/product-updates' },
+  supabase: { pricing: 'https://supabase.com/pricing', release: 'https://supabase.com/changelog' },
 };
 
-export function knownPricingPage(vendor) {
+export function knownOfficialPage(vendor, kind) {
   const name = vendor.toLowerCase().trim();
-  return Object.hasOwn(pricingPages, name) ? pricingPages[name] : undefined;
+  return Object.hasOwn(officialPages, name) ? officialPages[name][kind] : undefined;
 }
 
 export function officialDomain(vendor) {
@@ -103,9 +104,8 @@ export function summarizeChecks(checklist, coverage, sources, since, today) {
   return checklist.map(check => {
     const ids = [...new Set(coverage.filter(item => item.target === check.target).flatMap(item => item.ids))];
     const official = ids.filter(id => isOfficial(sources[id - 1], officialDomain(check.vendor)));
-    const findings = official.flatMap(id => {
-      return eventsFrom(sources[id - 1], check.kind, since, today).map(event => ({ ...event, citation: id }));
-    });
+    const findings = official.filter(id => !sources[id - 1].releaseIndex).flatMap(id =>
+      eventsFrom(sources[id - 1], check.kind, since, today).map(event => ({ ...event, citation: id })));
     const consistent = new Set(findings.map(finding => finding.status)).size === 1;
     const finding = consistent ? findings[0] : undefined;
     return { ...check, evidenceCount: ids.length, officialEvidenceCount: official.length,

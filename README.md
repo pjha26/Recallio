@@ -102,7 +102,9 @@ Run `npm test` for the SQLite recovery and mocked-provider tests. These tests ne
 
 The evaluation commands need a model key. The live web evaluation also needs SearXNG or Exa. The restart demo needs no keys. Fixture prices and releases are synthetic. Live results vary with upstream search availability and model output.
 
-The live evaluation exits with an error if a prompt retrieves no web evidence. If search fails and returns no usable sources, Recallio can read up to two known official pricing pages for supported vendors. The report counts those separately as `directReads` and still lists the failed searches. A current pricing page can verify today's terms when it has a supporting quote. Historical status still requires dated evidence.
+Both evaluations exit with an error if the plan omits a required vendor and check type. The live evaluation also fails when a prompt retrieves no web evidence. Each run lists the required checks that lack official evidence, even when the planner included them.
+
+If search fails without returning usable sources, Recallio can read up to two known official vendor pages. When both types are requested and mapped, it tries one pricing page and one release index. The evaluation counts these separately as `directReads` and lists the failed searches. A release index is a reference link. It may contain partial excerpts or entries from several dates, so it cannot confirm an individual release.
 
 In PowerShell, set `$env:EVAL_RUNS = '3'` before an evaluation to repeat each prompt three times. The summary reports ranges for checklist coverage, verified outcomes, elapsed time, and model steps. It also counts fallback answers. Run `Remove-Item Env:EVAL_RUNS` to restore the default of one run.
 

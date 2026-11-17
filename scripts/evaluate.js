@@ -7,6 +7,8 @@ const zone = 'UTC';
 const vendors = ['HubSpot', 'Salesforce', 'Pipedrive', 'Zoho CRM', 'Freshsales'];
 const postgres = { question: 'What does the Supabase Pro plan cost for a small Postgres project?',
   answer: 'The Supabase Pro subscription starts at $25 per month.', created: '2026-11-10T15:00:00Z' };
+const vendorName = name => name.toLowerCase().trim()
+  .replace(/^(hubspot|salesforce|pipedrive|freshsales) crm$/, '$1').replace(/^supabase pro$/, 'supabase');
 const cases = [
   { name: 'CRM changes', question: 'On Monday we shortlisted 5 CRM tools for a 20-person sales team. Has any of them changed pricing or shipped something big since?',
     history: { question: 'Which CRM tools should we shortlist?', answer: vendors.join(', '), created: '2026-11-09T15:00:00Z' }, entities: vendors },
@@ -60,15 +62,25 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     } },
       progress() {}, signal: AbortSignal.timeout(42000) });
     const elapsedMs = Math.round(performance.now() - start);
-    const expected = entities.length * (name === 'CRM changes' ? 2 : 1);
+    const kinds = name === 'CRM changes' ? ['pricing', 'release'] : ['pricing'];
+    const required = entities.flatMap(vendor => kinds.map(kind => ({
+      label: vendor + ' ' + kind,
+      result: result.checklist.find(check => vendorName(check.vendor) === vendorName(vendor) && check.kind === kind),
+    })));
+    const expected = required.length;
+    const missingChecks = required.filter(check => !check.result).map(check => check.label);
+    const missingOfficialEvidence = required.filter(check => !check.result?.officialEvidenceCount).map(check => check.label);
     const covered = result.checklist.filter(check => check.evidenceCount > 0).length;
     const official = result.checklist.filter(check => check.officialEvidenceCount > 0).length;
     const directReads = result.coverage.filter(check => check.direct).length;
     const missingEvidence = web && !result.coverage.some(check => check.ids.length);
-    if (missingEvidence) process.exitCode = 1;
+    if (missingEvidence || missingChecks.length) process.exitCode = 1;
     const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
-    summaries.push({ name, elapsedMs, modelSteps, expected, covered, official, directReads, verified, missingEvidence, checks: result.checklist.length, unverified: Boolean(result.unverified) });
-    console.log(JSON.stringify({ run, name, elapsedMs, modelSteps, directReads, missingEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
+    summaries.push({ name, elapsedMs, modelSteps, expected, covered, official, directReads, verified, missingEvidence,
+      missingChecks: missingChecks.length, missingOfficialEvidence: missingOfficialEvidence.length, checks: result.checklist.length,
+      unverified: Boolean(result.unverified) });
+    console.log(JSON.stringify({ run, name, elapsedMs, modelSteps, directReads, missingEvidence, missingChecks,
+      missingOfficialEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -89,6 +101,7 @@ for (const { name } of cases) {
     ? [Math.min(...completed.map(item => item[key])), Math.max(...completed.map(item => item[key]))] : [];
   console.log(JSON.stringify({ summary: name, runs: runs.length, errors: runs.length - completed.length,
     expected: range('expected'), checks: range('checks'), covered: range('covered'), official: range('official'), directReads: range('directReads'),
+    missingChecks: range('missingChecks'), missingOfficialEvidence: range('missingOfficialEvidence'),
     verified: range('verified'), elapsedMs: range('elapsedMs'), modelSteps: range('modelSteps'),
     withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
     fallbackAnswers: completed.filter(item => item.unverified).length }));

@@ -1,4 +1,4 @@
-import { isOfficial, knownPricingPage, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
+import { isOfficial, knownOfficialPage, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
 import { searchFailureReason } from './providers.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
@@ -60,6 +60,7 @@ For changes since a prior discussion, quote the date from the matching history e
 Compare equivalent billing period, plan, region, and usage. Mention failed or empty checks and uncertainty.
 State which sources you checked when no change was found. If coverage is incomplete, dates are missing, or sources conflict, say what you could not verify. Do not infer that nothing changed from a lack of evidence.
 Search excerpts are partial. Never claim that a changelog contains no entries or that the sources cover every day of the period.
+Evidence marked releaseIndex is a reference link only. It cannot substantiate individual shipped releases.
 If several entities are requested give each a status. If no matching conversation is available, say so.
 When a checklist is supplied, use its server-verified statuses and citations as the basis for the answer. For unresolved rows use a direct statement such as "Pricing: unable to verify" or "Releases: unable to verify." If current pricing is known but the history is unresolved, state today's price separately.
 Do not generate links. Never invent chat history or evidence.`;
@@ -118,9 +119,9 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   const plan = await providers.model(planPrompt, context, value => readPlan(value, history), signal, progress);
   const evidence = [];
   const coverage = [];
-  const excerpts = () => evidence.map(({ url, title, date, text, pageText }, i) => {
+  const excerpts = () => evidence.map(({ url, title, date, text, pageText, releaseIndex }, i) => {
     const { hostname, pathname } = new URL(url);
-    return { id: i + 1, domain: hostname, path: pathname.slice(0, 160), title, date, text: text.slice(0, 340), pageText };
+    return { id: i + 1, domain: hostname, path: pathname.slice(0, 160), title, date, text: text.slice(0, 340), pageText, releaseIndex };
   });
 
   async function search({ query, objective, since, target }, searchSignal) {
@@ -166,16 +167,21 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   const answerContext = { ...context, history: recentHistory, focus: plan.focus, coverage,
     checklist: plan.checklist, comparisonStart: plan.since };
   const directPages = !evidence.length && providers.readPage && coverage.some(check => check.failed)
-    ? plan.checklist.filter(check => check.kind === 'pricing' && knownPricingPage(check.vendor)).slice(0, 2)
+    ? plan.checklist.filter(check => knownOfficialPage(check.vendor, check.kind))
     : [];
   if (directPages.length && !signal.aborted) {
-    progress('Reading official pricing pages');
-    const recovered = await Promise.all(directPages.map(async ({ target, vendor }) => {
-      const url = knownPricingPage(vendor);
+    progress('Reading official vendor pages');
+    const firstPricing = directPages.find(check => check.kind === 'pricing');
+    const firstRelease = directPages.find(check => check.kind === 'release');
+    const selected = [...new Set([firstPricing, firstRelease, ...directPages].filter(Boolean))].slice(0, 2);
+    const recovered = await Promise.all(selected.map(async ({ target, vendor, kind }) => {
+      const url = knownOfficialPage(vendor, kind);
+      const releaseIndex = kind === 'release';
+      const title = vendor + (releaseIndex ? ' product updates' : ' pricing');
       try {
         const pageText = await providers.readPage(url, signal);
-        return pageText && { target, query: vendor + ' official pricing page', direct: true, failed: false,
-          matches: [{ url, title: vendor + ' pricing', text: '', pageText, date: null }] };
+        return pageText && { target, query: title, direct: true, failed: false,
+          matches: [{ url, title, text: '', pageText, date: null, releaseIndex }] };
       } catch {
         return undefined;
       }
@@ -342,7 +348,7 @@ export function validateEvidenceChecks(checks, citations, evidence) {
     const supported = {
       base_price: hasPrice && /\b(?:plan|subscription|starts? at|starting at|from\s*[$€£])/.test(excerpt)
         && !/\b(?:credit|egress|per gb|per mau)\b/.test(excerpt),
-      shipped: hasDate && /\b(?:shipped|released|launched|generally available|now available)\b/.test(excerpt)
+      shipped: !source.releaseIndex && hasDate && /\b(?:shipped|released|launched|generally available|now available)\b/.test(excerpt)
         && !/\b(?:will be|planned|expected|preview|beta|upcoming)\b/.test(excerpt),
       price_change: hasDate && /\b(?:chang(?:e|ed|es)|increas(?:e|ed|es)|decreas(?:e|ed|es)|new pric(?:e|ing)|rais(?:e|ed|es)|lower(?:ed|s))\b/.test(excerpt),
     };

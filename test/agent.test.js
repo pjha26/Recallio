@@ -76,30 +76,34 @@ test('a slow query does not block later searches or change citation order', asyn
   assert.deepEqual(result.sources.map(source => source.title), ['Vendor 0', 'Vendor 4']);
 });
 
-test('a search outage reads at most two known official pricing pages without claiming historical change', async () => {
+test('a search outage reads one pricing page and one release index without claiming historical change', async () => {
   const reads = [];
-  const prior = { question: 'Which vendors should we use?', answer: 'HubSpot, Zoho CRM, and Supabase.',
+  const prior = { question: 'Which vendors should we use?', answer: 'Pipedrive, Zoho CRM, and Supabase.',
     date: '2026-11-09', timestamp: '2026-11-09T12:00:00Z' };
   const result = await answerTurn({
-    question: 'Has their pricing changed since Monday?', history: [prior], zone: 'UTC',
+    question: 'Has their pricing changed or have they shipped releases since Monday?', history: [prior], zone: 'UTC',
     now: '2026-11-12T12:00:00Z', progress() {}, signal: new AbortController().signal,
     providers: {
       async search() { throw Object.assign(new Error('Unavailable'), { code: 'upstream-engines' }); },
       async readPage(url) {
         reads.push(url);
-        return 'The Pro plan starts at $20 per month.';
+        return url.includes('product-updates') ? 'Version 4 shipped on November 11, 2026.' : 'The Pro plan starts at $20 per month.';
       },
       async model(_prompt, input, validate) {
         if (!input.evidence) return validate({ focus: 'Price changes', queries: [], review: true,
-          baseline: prior.timestamp, targets: ['HubSpot CRM', 'Zoho CRM', 'Supabase'].map(vendor => ({ vendor, kinds: ['pricing'] })) });
+          baseline: prior.timestamp, targets: [
+            { vendor: 'Zoho CRM', kinds: ['pricing'] }, { vendor: 'Supabase', kinds: ['pricing'] },
+            { vendor: 'Pipedrive', kinds: ['release'] },
+          ] });
         return validate({ answer: 'Historical pricing: unable to verify.', citations: [], checks: [] });
       },
     },
   });
-  assert.deepEqual(reads, ['https://www.zoho.com/crm/zohocrm-pricing.html', 'https://supabase.com/pricing']);
+  assert.deepEqual(reads, ['https://www.zoho.com/crm/zohocrm-pricing.html', 'https://www.pipedrive.com/en/product-updates']);
   assert.equal(result.incomplete, 3);
   assert.equal(result.coverage.filter(check => check.direct).length, 2);
   assert.deepEqual(result.sources.map(source => source.url), reads);
+  assert.equal(result.sources[1].releaseIndex, true);
   assert.ok(result.checklist.every(check => check.status === 'unable_to_verify'));
 });
 
