@@ -1,0 +1,10 @@
+services:
+  searxng:
+    image: searxng/searxng@sha256:0b104e2e1117b0ca83a36f3ac6ecda7d9ee948ccea6ead74750a03e1b856229a
+    ports:
+      - "127.0.0.1:${SEARXNG_PORT:-43193}:8080"
+    environment:
+      SEARXNG_SECRET: "${SEARXNG_SECRET:?Set SEARXNG_SECRET in .env for local search}"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped

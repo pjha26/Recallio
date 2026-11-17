@@ -1,4 +1,5 @@
-import { isOfficial, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
+import { isOfficial, knownPricingPage, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
+import { searchFailureReason } from './providers.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 const day = (iso, zone) => new Intl.DateTimeFormat('en-CA', { timeZone: zone, dateStyle: 'short' }).format(new Date(iso));
@@ -129,17 +130,11 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       const matches = await providers.search(query, objective, date, searchSignal);
       return { query, target, matches, failed: false };
     } catch (error) {
-      const code = error.code ?? error.cause?.code;
-      const reason = searchSignal.aborted ? 'deadline' :
-        error.name === 'TimeoutError' || error.name === 'AbortError' ? 'timeout' :
-          error.status ? 'http-' + error.status :
-            code === 'upstream-engines' ? code :
-              code === 'ECONNREFUSED' ? 'connection-refused' : 'provider';
-      return { query, target, matches: [], failed: true, reason };
+      return { query, target, matches: [], failed: true, reason: searchFailureReason(error, searchSignal) };
     }
   }
 
-  function addResult({ query, target, matches, failed, reason }) {
+  function addResult({ query, target, matches, failed, reason, direct }) {
     const check = plan.checklist.find(item => item.target === target);
     const ranked = rankSources(matches, officialDomain(check?.vendor ?? ''), check?.kind);
     const ids = ranked.slice(0, 2).map(source => {
@@ -150,7 +145,7 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       }
       return index + 1;
     });
-    coverage.push({ query, target, ids, failed, ...(reason ? { reason } : {}) });
+    coverage.push({ query, target, ids, failed, ...(reason ? { reason } : {}), ...(direct ? { direct } : {}) });
   }
 
   if (plan.queries.length) progress('Checking web sources');
@@ -170,7 +165,23 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   const recentHistory = plan.baseline ? [...new Set([plan.baseline, ...history])].slice(0, 4) : history.slice(0, 4);
   const answerContext = { ...context, history: recentHistory, focus: plan.focus, coverage,
     checklist: plan.checklist, comparisonStart: plan.since };
-  if (coverage.length > 0 && coverage.length < searchBudget && (plan.review || coverage.some(check => !check.ids.length))) {
+  const directPages = !evidence.length && providers.readPage && coverage.some(check => check.failed)
+    ? plan.checklist.filter(check => check.kind === 'pricing' && knownPricingPage(check.vendor)).slice(0, 2)
+    : [];
+  if (directPages.length && !signal.aborted) {
+    progress('Reading official pricing pages');
+    const recovered = await Promise.all(directPages.map(async ({ target, vendor }) => {
+      const url = knownPricingPage(vendor);
+      try {
+        const pageText = await providers.readPage(url, signal);
+        return pageText && { target, query: vendor + ' official pricing page', direct: true, failed: false,
+          matches: [{ url, title: vendor + ' pricing', text: '', pageText, date: null }] };
+      } catch {
+        return undefined;
+      }
+    }));
+    recovered.filter(Boolean).forEach(addResult);
+  } else if (coverage.length > 0 && coverage.length < searchBudget && (plan.review || coverage.some(check => !check.ids.length))) {
     let followUp = { queries: [], read: [] };
     // Once searches take multiple waves, spend the remaining budget on a targeted search.
     const broad = plan.checklist.length > searchWorkers;
@@ -232,6 +243,7 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   const incomplete = coverage.filter(check => check.failed).length;
   const checklist = summarizeChecks(plan.checklist, coverage, evidence, plan.since, today);
   const checklistCitations = checklist.flatMap(check => check.citation ? [check.citation] : []);
+  const directCitations = coverage.filter(check => check.direct).flatMap(check => check.ids);
   const sourcesFor = ids => [...new Set(ids)].map(id => ({ id, ...evidence[id - 1] }));
   const fallback = () => {
     const paragraphs = [];
@@ -277,7 +289,7 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       if (currencyAmounts(value.answer).some(amount => !supportedPrices.has(amount))) {
         throw new Error('An answer amount has no supporting quote');
       }
-      return { answer: value.answer, sources: sourcesFor([...ids, ...checklistCitations]), incomplete, coverage, checklist };
+      return { answer: value.answer, sources: sourcesFor([...ids, ...checklistCitations, ...directCitations]), incomplete, coverage, checklist };
     }, signal, progress);
   } catch (error) {
     if (!evidence.length || signal.aborted) throw error;

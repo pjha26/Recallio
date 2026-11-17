@@ -67,27 +67,20 @@ Run `npm run dev` and open [Recallio on localhost](http://127.0.0.1:3000) or the
 
 ## Use SearXNG without a search key
 
-With Docker running, create a folder called `searxng-config` outside the repository. Save this as `settings.yml` inside it and replace the placeholder with a random secret.
-
-```yaml
-use_default_settings: true
-server:
-  secret_key: "replace-with-a-random-secret"
-  limiter: false
-search:
-  formats:
-    - html
-    - json
-```
-
-From the folder containing `searxng-config`, run the following in PowerShell. The port is bound to this machine only.
+If you already have a working SearXNG instance, set `SEARXNG_URL` to its base URL and run `npm run search:check`. For a fresh setup, start Docker, generate a random secret, and paste the output into `SEARXNG_SECRET` in your local `.env`.
 
 ```powershell
-$config = (Resolve-Path ./searxng-config).Path
-docker run -d --name recallio-searxng --restart unless-stopped -p 127.0.0.1:43193:8080 --mount "type=bind,source=$config,target=/etc/searxng" searxng/searxng:latest
+node -p "require('node:crypto').randomBytes(32).toString('hex')"
 ```
 
-Open [a test JSON search](http://127.0.0.1:43193/search?q=Supabase+pricing&format=json), then set `SEARXNG_URL=http://127.0.0.1:43193` in Recallio's `.env` and restart Recallio.
+Set `SEARXNG_URL=http://127.0.0.1:43193` in the same file, then run these commands from the repo folder:
+
+```powershell
+docker compose up -d
+npm run search:check
+```
+
+Compose enables JSON and publishes the service on localhost only. If port 43193 is occupied, set `SEARXNG_PORT` and change `SEARXNG_URL` to use the same port. The search check makes one request to your configured search provider without calling either model. Restart Recallio after changing its `.env`.
 
 ## Check conversation recall
 
@@ -109,7 +102,7 @@ Run `npm test` for the SQLite recovery and mocked-provider tests. These tests ne
 
 The evaluation commands need a model key. The live web evaluation also needs SearXNG or Exa. The restart demo needs no keys. Fixture prices and releases are synthetic. Live results vary with upstream search availability and model output.
 
-The live evaluation exits with an error if a prompt retrieves no web evidence. Read its failure reasons and official source coverage before treating a completed model response as a successful search.
+The live evaluation exits with an error if a prompt retrieves no web evidence. If search fails and returns no usable sources, Recallio can read up to two known official pricing pages for supported vendors. The report counts those separately as `directReads` and still lists the failed searches. A current pricing page can verify today's terms when it has a supporting quote. Historical status still requires dated evidence.
 
 In PowerShell, set `$env:EVAL_RUNS = '3'` before an evaluation to repeat each prompt three times. The summary reports ranges for checklist coverage, verified outcomes, elapsed time, and model steps. It also counts fallback answers. Run `Remove-Item Env:EVAL_RUNS` to restore the default of one run.
 
@@ -120,6 +113,8 @@ For vendor research, Recallio builds separate pricing and release checks and sho
 | Symptom | Check |
 | --- | --- |
 | The app asks for a model key | Set `GROQ_API_KEY` or `GEMINI_API_KEY` and restart Recallio. |
-| SearXNG requests fail | Keep Docker running and open the test JSON URL above. Check the port mapping and JSON format setting. |
+| Search check reports `connection-refused` | Start Docker and run `docker compose ps`, or check the URL and port of your existing instance. |
+| SearXNG search check reports `http-403` | Check that the instance allows JSON search requests. The included Compose settings enable JSON. |
+| Search check reports `upstream-engines` | SearXNG responded, but returned no results and reported upstream failures. Inspect `docker compose logs --tail=50 searxng` and retry later. |
 | Exa returns HTTP 402 | Check the balance for the key's Exa project or configure SearXNG. |
 | An earlier conversation is missing | Reopen the same browser profile and origin, including the port you used before. |

@@ -12,6 +12,16 @@ const domains = {
   neon: 'neon.tech',
 };
 
+const pricingPages = {
+  'zoho crm': 'https://www.zoho.com/crm/zohocrm-pricing.html',
+  supabase: 'https://supabase.com/pricing',
+};
+
+export function knownPricingPage(vendor) {
+  const name = vendor.toLowerCase().trim();
+  return Object.hasOwn(pricingPages, name) ? pricingPages[name] : undefined;
+}
+
 export function officialDomain(vendor) {
   const name = vendor.toLowerCase().trim();
   if (Object.hasOwn(domains, name)) return domains[name];

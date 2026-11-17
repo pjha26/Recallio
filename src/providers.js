@@ -2,6 +2,16 @@ import { readPublicPage } from './pages.js';
 
 const timeout = (signal, ms) => AbortSignal.any([signal, AbortSignal.timeout(ms)]);
 
+export function searchFailureReason(error, signal) {
+  if (signal?.aborted) return 'deadline';
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') return 'timeout';
+  if (error.status) return 'http-' + error.status;
+  const code = error.code ?? error.cause?.code;
+  if (code === 'upstream-engines') return code;
+  if (code === 'ECONNREFUSED') return 'connection-refused';
+  return 'provider';
+}
+
 async function json(url, options) {
   const response = await fetch(url, { ...options, redirect: 'error' });
   if (!response.ok) throw Object.assign(new Error('Provider request failed'), {
