@@ -76,7 +76,7 @@ test('a slow query does not block later searches or change citation order', asyn
   assert.deepEqual(result.sources.map(source => source.title), ['Vendor 0', 'Vendor 4']);
 });
 
-test('a search outage reads one pricing page and one release index without claiming historical change', async () => {
+test('partial search reads one missing pricing page and one release index without claiming historical change', async () => {
   const reads = [];
   const prior = { question: 'Which vendors should we use?', answer: 'Pipedrive, Zoho CRM, and Supabase.',
     date: '2026-11-09', timestamp: '2026-11-09T12:00:00Z' };
@@ -84,7 +84,15 @@ test('a search outage reads one pricing page and one release index without claim
     question: 'Has their pricing changed or have they shipped releases since Monday?', history: [prior], zone: 'UTC',
     now: '2026-11-12T12:00:00Z', progress() {}, signal: new AbortController().signal,
     providers: {
-      async search() { throw Object.assign(new Error('Unavailable'), { code: 'upstream-engines' }); },
+      async search(query) {
+        if (query.startsWith('Supabase')) {
+          return [
+            { url: 'https://supabase.com/pricing', title: 'Pricing', text: 'The Pro plan starts at $25 per month.' },
+            { url: 'https://www.pipedrive.com/en/product-updates', title: 'Product updates', text: 'Another vendor.' },
+          ];
+        }
+        throw Object.assign(new Error('Unavailable'), { code: 'upstream-engines' });
+      },
       async readPage(url) {
         reads.push(url);
         return url.includes('product-updates') ? 'Version 4 shipped on November 11, 2026.' : 'The Pro plan starts at $20 per month.';
@@ -100,7 +108,7 @@ test('a search outage reads one pricing page and one release index without claim
     },
   });
   assert.deepEqual(reads, ['https://www.zoho.com/crm/zohocrm-pricing.html', 'https://www.pipedrive.com/en/product-updates']);
-  assert.equal(result.incomplete, 3);
+  assert.equal(result.incomplete, 2);
   assert.equal(result.coverage.filter(check => check.direct).length, 2);
   assert.deepEqual(result.sources.map(source => source.url), reads);
   assert.equal(result.sources[1].releaseIndex, true);

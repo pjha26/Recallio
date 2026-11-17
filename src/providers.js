@@ -20,6 +20,26 @@ async function json(url, options) {
   return response.json();
 }
 
+export function querySearxng(baseUrl, query, signal) {
+  const url = new URL('search', baseUrl.replace(/\/?$/, '/'));
+  url.search = new URLSearchParams({ q: query, format: 'json', categories: 'general' });
+  return json(url, { signal: timeout(signal, 5500) });
+}
+
+export function normalizeSearchResults(data) {
+  if (!Array.isArray(data.results)) throw new Error('Invalid search response');
+  return data.results.slice(0, 5).flatMap(result => {
+    try {
+      const url = new URL(result.url);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return [];
+      url.hash = '';
+      const text = result.highlights?.join(' ') || result.content || result.text || '';
+      return [{ url: url.href, title: String(result.title || url.hostname).slice(0, 160),
+        text: String(text).slice(0, 550), date: result.publishedDate || null }];
+    } catch { return []; }
+  });
+}
+
 export function createProviders(env) {
   const models = [];
   if (env.GROQ_API_KEY) models.push({
@@ -80,9 +100,7 @@ export function createProviders(env) {
     async search(query, objective, since, signal) {
       let data;
       if (endpoint) {
-        const url = new URL(endpoint);
-        url.search = new URLSearchParams({ q: query, format: 'json', categories: 'general' });
-        data = await json(url, { signal: timeout(signal, 5500) });
+        data = await querySearxng(env.SEARXNG_URL, query, signal);
         if (!data.results?.length && data.unresponsive_engines?.length) {
           throw Object.assign(new Error('Search engines unavailable'), { code: 'upstream-engines' });
         }
@@ -95,17 +113,7 @@ export function createProviders(env) {
             ...(since ? { startPublishedDate: since } : {}), contents: { highlights: true } }),
         });
       }
-      if (!Array.isArray(data.results)) throw new Error('Invalid search response');
-      return data.results.slice(0, 5).flatMap(result => {
-        try {
-          const url = new URL(result.url);
-          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return [];
-          url.hash = '';
-          const text = result.highlights?.join(' ') || result.content || result.text || '';
-          return [{ url: url.href, title: String(result.title || url.hostname).slice(0, 160),
-            text: String(text).slice(0, 550), date: result.publishedDate || null }];
-        } catch { return []; }
-      });
+      return normalizeSearchResults(data);
     },
   };
 }

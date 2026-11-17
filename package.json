@@ -12,6 +12,7 @@
     "eval": "node --env-file-if-exists=.env scripts/evaluate.js",
     "eval:web": "node --env-file-if-exists=.env scripts/evaluate.js --web",
     "search:check": "node --env-file-if-exists=.env scripts/check-search.js",
+    "search:bench": "node --env-file-if-exists=.env scripts/benchmark-search.js",
     "demo": "node scripts/demo.js"
   },
   "dependencies": {

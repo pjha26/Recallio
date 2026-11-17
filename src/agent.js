@@ -1,4 +1,4 @@
-import { isOfficial, knownOfficialPage, officialDomain, rankSources, summarizeChecks } from './vendor-evidence.js';
+import { isOfficial, knownOfficialPage, officialDomain, rankSources, summarizeChecks, vendorSearchQuery } from './vendor-evidence.js';
 import { searchFailureReason } from './providers.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
@@ -101,9 +101,7 @@ function readPlan(value, history) {
   const since = baseline?.date;
   const initial = checklist.map(({ target, vendor, kind }) => ({
     target, since: null,
-    query: vendor + (kind === 'pricing' ? ' official pricing plans' : ' official changelog shipped releases') +
-      (kind === 'release' && since ? ' since ' + since : '') +
-      (officialDomain(vendor) ? ' site:' + officialDomain(vendor) : ''),
+    query: vendorSearchQuery(vendor, kind, since),
     objective: kind === 'pricing' ? 'Find official current subscription prices and any dated pricing changes.' :
       'Find official dated release notes describing features already shipped.',
   }));
@@ -139,10 +137,13 @@ export async function answerTurn({ question, history, zone, now, providers, prog
     const check = plan.checklist.find(item => item.target === target);
     const ranked = rankSources(matches, officialDomain(check?.vendor ?? ''), check?.kind);
     const ids = ranked.slice(0, 2).map(source => {
-      let index = evidence.findIndex(item => item.url === source.url);
+      let index = evidence.findIndex(item => item.url === source.url &&
+        Boolean(item.releaseIndex) === Boolean(source.releaseIndex));
       if (index === -1) {
         index = evidence.length;
         evidence.push(source);
+      } else if (source.pageText) {
+        evidence[index].pageText = source.pageText;
       }
       return index + 1;
     });
@@ -166,8 +167,12 @@ export async function answerTurn({ question, history, zone, now, providers, prog
   const recentHistory = plan.baseline ? [...new Set([plan.baseline, ...history])].slice(0, 4) : history.slice(0, 4);
   const answerContext = { ...context, history: recentHistory, focus: plan.focus, coverage,
     checklist: plan.checklist, comparisonStart: plan.since };
-  const directPages = !evidence.length && providers.readPage && coverage.some(check => check.failed)
-    ? plan.checklist.filter(check => knownOfficialPage(check.vendor, check.kind))
+  const covered = check => coverage.some(result => result.target === check.target && result.ids.some(id => {
+    const domain = officialDomain(check.vendor);
+    return !domain || isOfficial(evidence[id - 1], domain);
+  }));
+  const directPages = providers.readPage
+    ? plan.checklist.filter(check => !covered(check) && knownOfficialPage(check.vendor, check.kind))
     : [];
   if (directPages.length && !signal.aborted) {
     progress('Reading official vendor pages');
@@ -205,10 +210,6 @@ export async function answerTurn({ question, history, zone, now, providers, prog
         // The initial evidence remains usable if the optional review times out.
       }
     }
-    const covered = check => coverage.some(result => result.target === check.target && result.ids.some(id => {
-      const domain = officialDomain(check.vendor);
-      return !domain || isOfficial(evidence[id - 1], domain);
-    }));
     const gap = plan.checklist.find(check => !covered(check)) ??
       (broad && plan.since ? summarizeChecks(plan.checklist, coverage, evidence, plan.since, today)
         .find(check => check.status === 'unable_to_verify') : undefined);

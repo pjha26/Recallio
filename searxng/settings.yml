@@ -1,4 +1,13 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    keep_only:
+      - bing
+      - yahoo
+engines:
+  - name: bing
+    disabled: false
+  - name: yahoo
+    disabled: false
 server:
   limiter: false
   public_instance: false

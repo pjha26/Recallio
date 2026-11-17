@@ -42,6 +42,12 @@ export function isOfficial(source, domain) {
   return hostname === domain || hostname.endsWith('.' + domain);
 }
 
+export function vendorSearchQuery(vendor, kind, since) {
+  const domain = officialDomain(vendor);
+  return vendor + (kind === 'pricing' ? ' official pricing plans' : ' official changelog shipped releases') +
+    (kind === 'release' && since ? ' since ' + since : '') + (domain ? ' site:' + domain : '');
+}
+
 export function rankSources(sources, domain, kind) {
   const relevant = kind === 'pricing' ? /pricing|plans|billing|subscription|prices?/i :
     kind === 'release' ? /changelog|releases?|product updates?|what.s new/i : null;
