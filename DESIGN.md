@@ -2,7 +2,7 @@
 
 ## How it works
 
-A Node HTTP server serves the chat UI, stores turns in SQLite, and controls the model and search calls. An opaque browser cookie scopes all history queries. The app records the original question before calling any provider. A request ID makes retries safe, and SQLite stores the reply and its citations together. An interrupted turn can be retried after a restart.
+A loopback Node HTTP server serves the chat UI, stores turns in SQLite, and controls model and search calls. It accepts only the local host names and checks browser write origins. An opaque browser cookie scopes history queries. The app records the original question before calling providers. A request ID makes retries safe, and SQLite stores the reply and citations together.
 
 For each turn, the server selects relevant history by date and keywords. The model proposes a bounded search plan. Four workers take the next query as a slot opens. The server records results and failures, then assigns citation IDs in plan order. Vendor queries add a first-party domain for mapped products; results rank official hosts and page paths or titles relevant to pricing or releases. For each check, server rules require an official domain and an explicit dated statement in the requested window before marking a change or no change. Unsupported statuses stay unresolved. The answer is also rejected if it claims a change for an unresolved checklist row. These lightweight rules do not verify every sentence or every vendor's canonical domain.
 

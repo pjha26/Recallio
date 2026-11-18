@@ -50,6 +50,16 @@ test('official host matching rejects lookalike domains', () => {
   assert.equal(isOfficial({ url: 'https://hubspot.com.attacker.test/' }, 'hubspot.com'), false);
 });
 
+test('a vendor homepage does not count as relevant release evidence', () => {
+  const checks = [{ target: 1, vendor: 'Freshsales', kind: 'release' }];
+  const rows = summarizeChecks(checks, [{ target: 1, ids: [1] }], [
+    { url: 'https://www.freshworks.com/', title: 'Freshworks', text: 'Version 4 shipped on November 11, 2026.' },
+  ], since, today);
+  assert.equal(rows[0].officialEvidenceCount, 1);
+  assert.equal(rows[0].relevantEvidenceCount, 0);
+  assert.equal(rows[0].status, 'unable_to_verify');
+});
+
 test('CRM aliases map to first-party hosts and relevant pages rank first', () => {
   assert.equal(officialDomain('Attio CRM'), 'attio.com');
   assert.equal(officialDomain('Close CRM'), 'close.com');

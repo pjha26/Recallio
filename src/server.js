@@ -46,7 +46,14 @@ const server = createServer(async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
+    const host = req.headers.host?.toLowerCase();
+    const port = server.address().port;
+    const suffix = port === 80 ? '' : ':' + port;
+    if (host !== '127.0.0.1' + suffix && host !== 'localhost' + suffix) {
+      return send(res, 403, { error: 'Use the local Recallio address printed in the terminal.' });
+    }
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && assets.has(url.pathname)) {
       const [file, type] = assets.get(url.pathname);
@@ -68,8 +75,11 @@ const server = createServer(async (req, res) => {
       });
     }
     if (req.method !== 'POST' || url.pathname !== '/api/chat') return send(res, 404, { error: 'Not found' });
-    if (req.headers['sec-fetch-site'] === 'cross-site' || req.headers['content-type'] !== 'application/json')
-      return send(res, 415, { error: 'Expected a same-site JSON request' });
+    const origin = req.headers.origin;
+    if (req.headers['sec-fetch-site'] === 'cross-site' || (origin !== undefined && origin !== 'http://' + host))
+      return send(res, 403, { error: 'Expected a request from this Recallio page.' });
+    if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json')
+      return send(res, 415, { error: 'Expected a JSON request.' });
     if (!providers.available) return send(res, 503, { error: 'Set GROQ_API_KEY or GEMINI_API_KEY in .env and restart.' });
     let turn;
     try { turn = await readTurn(req); } catch { return send(res, 400, { error: 'Invalid or oversized message.' }); }

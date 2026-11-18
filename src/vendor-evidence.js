@@ -48,12 +48,16 @@ export function vendorSearchQuery(vendor, kind, since) {
     (kind === 'release' && since ? ' since ' + since : '') + (domain ? ' site:' + domain : '');
 }
 
+export function isRelevant(source, kind) {
+  const clue = kind === 'pricing' ? /\b(?:pricing|plans|billing|subscriptions?|prices?)\b/i :
+    kind === 'release' ? /\b(?:changelog|releases?|updates?|what.s[ -]new)\b/i : null;
+  return Boolean(clue?.test(new URL(source.url).pathname + ' ' + source.title));
+}
+
 export function rankSources(sources, domain, kind) {
-  const relevant = kind === 'pricing' ? /pricing|plans|billing|subscription|prices?/i :
-    kind === 'release' ? /changelog|releases?|product updates?|what.s new/i : null;
   return sources.toSorted((a, b) => {
     const score = source => Number(isOfficial(source, domain)) * 2 +
-      Number(relevant?.test(new URL(source.url).pathname + ' ' + source.title) ?? false);
+      Number(isRelevant(source, kind));
     return score(b) - score(a);
   });
 }
@@ -110,11 +114,12 @@ export function summarizeChecks(checklist, coverage, sources, since, today) {
   return checklist.map(check => {
     const ids = [...new Set(coverage.filter(item => item.target === check.target).flatMap(item => item.ids))];
     const official = ids.filter(id => isOfficial(sources[id - 1], officialDomain(check.vendor)));
-    const findings = official.filter(id => !sources[id - 1].releaseIndex).flatMap(id =>
+    const relevant = official.filter(id => isRelevant(sources[id - 1], check.kind));
+    const findings = relevant.filter(id => !sources[id - 1].releaseIndex).flatMap(id =>
       eventsFrom(sources[id - 1], check.kind, since, today).map(event => ({ ...event, citation: id })));
     const consistent = new Set(findings.map(finding => finding.status)).size === 1;
     const finding = consistent ? findings[0] : undefined;
-    return { ...check, evidenceCount: ids.length, officialEvidenceCount: official.length,
+    return { ...check, evidenceCount: ids.length, officialEvidenceCount: official.length, relevantEvidenceCount: relevant.length,
       status: 'unable_to_verify', ...finding };
   });
 }

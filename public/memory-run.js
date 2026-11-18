@@ -51,11 +51,12 @@ function render() {
     score.textContent + '. You are at ' + coordinates(position) + '. Next disk at ' + coordinates(disks[collected]) + '.';
 }
 
-function start() {
+export function start() {
   position = columns * (rows - 1);
   collected = 0;
   intro.hidden = true;
   game.hidden = false;
+  disk.src = '/memory-disk.png';
   play.setAttribute('aria-expanded', 'true');
   render();
   board.focus();
@@ -84,7 +85,6 @@ function move(key) {
   if (collected === disks.length) replay.focus();
 }
 
-play.addEventListener('click', start);
 replay.addEventListener('click', start);
 document.querySelector('#exit-memory').addEventListener('click', exit);
 for (const button of controls.querySelectorAll('[data-move]')) {

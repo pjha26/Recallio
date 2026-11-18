@@ -1,5 +1,3 @@
-import './memory-run.js';
-
 const select = document.querySelector('select');
 const status = document.querySelector('#status');
 const messages = document.querySelector('#messages');
@@ -7,6 +5,7 @@ const welcome = document.querySelector('#welcome');
 const themeButton = document.querySelector('#theme');
 const terminal = welcome.querySelector('.art img');
 const gamePlayer = document.querySelector('#game-player');
+const play = document.querySelector('#play-memory');
 const suggestions = [...welcome.querySelectorAll('[data-prompt]')];
 const form = document.querySelector('form');
 const input = form.querySelector('textarea');
@@ -16,6 +15,19 @@ try { chat = sessionStorage.getItem('recallio-chat'); } catch { /* Storage can b
 chat ||= crypto.randomUUID();
 let pending = false;
 let refreshTimer;
+let refreshVersion = 0;
+
+play.addEventListener('click', async () => {
+  play.disabled = true;
+  try {
+    const game = await import('./memory-run.js');
+    game.start();
+  } catch {
+    status.textContent = 'Memory Run could not load. Try again.';
+  } finally {
+    play.disabled = false;
+  }
+});
 
 function setVioletTheme(enabled) {
   document.documentElement.dataset.theme = enabled ? 'violet' : 'arcade';
@@ -64,18 +76,28 @@ function showTurn(turn) {
       article.append(list);
     }
     if (turn.result.sources.length) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      details.append(summary);
       const list = document.createElement('ul');
       for (const source of turn.result.sources) {
+        let url;
+        try { url = new URL(source.url); } catch { continue; }
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) continue;
         const item = document.createElement('li');
         const link = document.createElement('a');
-        link.href = source.url;
+        link.href = url.href;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.textContent = '[' + source.id + '] ' + source.title;
         item.append(link);
         list.append(item);
       }
-      article.append(list);
+      if (list.children.length) {
+        summary.textContent = 'Sources (' + list.children.length + ')';
+        details.append(list);
+        article.append(details);
+      }
     }
   } else if (turn.state === 'interrupted') {
     const retry = document.createElement('button');
@@ -89,9 +111,14 @@ function showTurn(turn) {
 }
 
 async function refresh() {
-  const response = await fetch('/api/history?chat=' + encodeURIComponent(chat));
+  clearTimeout(refreshTimer);
+  const selectedChat = chat;
+  const version = ++refreshVersion;
+  const response = await fetch('/api/history?chat=' + encodeURIComponent(selectedChat));
+  if (version !== refreshVersion || selectedChat !== chat) return;
   if (!response.ok) throw new Error('Could not load the conversation.');
   const data = await response.json();
+  if (version !== refreshVersion || selectedChat !== chat) return;
   try { sessionStorage.setItem('recallio-chat', chat); } catch { /* Keep the current chat in memory. */ }
   select.replaceChildren(...data.chats.map(item => new Option(item.title.slice(0, 65), item.id)));
   if (!data.chats.some(item => item.id === chat)) {
@@ -103,7 +130,6 @@ async function refresh() {
   welcome.hidden = data.turns.length > 0;
   messages.hidden = !welcome.hidden;
   if (!data.configured && !status.textContent) status.textContent = 'Add your model and search settings in .env for live research.';
-  clearTimeout(refreshTimer);
   if (data.turns.some(turn => turn.state === 'running')) {
     refreshTimer = setTimeout(() => refresh().catch(error => { status.textContent = error.message; }), 1500);
   }

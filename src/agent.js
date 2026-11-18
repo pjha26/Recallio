@@ -1,4 +1,4 @@
-import { isOfficial, knownOfficialPage, officialDomain, rankSources, summarizeChecks, vendorSearchQuery } from './vendor-evidence.js';
+import { isOfficial, isRelevant, knownOfficialPage, officialDomain, rankSources, summarizeChecks, vendorSearchQuery } from './vendor-evidence.js';
 import { searchFailureReason } from './providers.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
@@ -29,6 +29,16 @@ export function selectHistory(history, chat, question, zone, now) {
 
 const searchBudget = 12;
 const searchWorkers = 4;
+
+function gapQuery(check, since) {
+  const domain = officialDomain(check.vendor);
+  return {
+    target: check.target, since: null,
+    query: check.vendor + (check.kind === 'pricing' ? ' official subscription pricing update announcement' : ' official product release notes') +
+      (since ? ' since ' + since : '') + (domain ? ' site:' + domain : ''),
+    objective: 'Find an official page for this product and check type, preferably with a dated event.',
+  };
+}
 
 const planPrompt = `Return JSON only, with queries (array of {query, objective, since}), focus (short string), review (boolean), and baseline (an exact timestamp from history, or null).
 Each query and objective is a required string. objective: Goal for this search turn; say which documents should rank first, which should be excluded, and what specific facts or figures to pull from them.
@@ -169,8 +179,9 @@ export async function answerTurn({ question, history, zone, now, providers, prog
     checklist: plan.checklist, comparisonStart: plan.since };
   const covered = check => coverage.some(result => result.target === check.target && result.ids.some(id => {
     const domain = officialDomain(check.vendor);
-    return !domain || isOfficial(evidence[id - 1], domain);
+    return !domain || (isOfficial(evidence[id - 1], domain) && isRelevant(evidence[id - 1], check.kind));
   }));
+  const alreadySearched = query => coverage.some(check => check.query.trim().toLowerCase() === query.trim().toLowerCase());
   const directPages = providers.readPage
     ? plan.checklist.filter(check => !covered(check) && knownOfficialPage(check.vendor, check.kind))
     : [];
@@ -179,7 +190,7 @@ export async function answerTurn({ question, history, zone, now, providers, prog
     const firstPricing = directPages.find(check => check.kind === 'pricing');
     const firstRelease = directPages.find(check => check.kind === 'release');
     const selected = [...new Set([firstPricing, firstRelease, ...directPages].filter(Boolean))].slice(0, 2);
-    const recovered = await Promise.all(selected.map(async ({ target, vendor, kind }) => {
+    const reads = Promise.all(selected.map(async ({ target, vendor, kind }) => {
       const url = knownOfficialPage(vendor, kind);
       const releaseIndex = kind === 'release';
       const title = vendor + (releaseIndex ? ' product updates' : ' pricing');
@@ -191,7 +202,13 @@ export async function answerTurn({ question, history, zone, now, providers, prog
         return undefined;
       }
     }));
+    const remainingGap = plan.checklist.find(check => !covered(check) && !selected.includes(check));
+    const next = remainingGap && gapQuery(remainingGap, plan.since);
+    const retry = next && coverage.length < searchBudget && coverage.some(check => check.ids.length) && !alreadySearched(next.query)
+      ? search(next, signal) : null;
+    const [recovered, retried] = await Promise.all([reads, retry]);
     recovered.filter(Boolean).forEach(addResult);
+    if (retried) addResult(retried);
   } else if (coverage.length > 0 && coverage.length < searchBudget && (plan.review || coverage.some(check => !check.ids.length))) {
     let followUp = { queries: [], read: [] };
     // Once searches take multiple waves, spend the remaining budget on a targeted search.
@@ -214,16 +231,9 @@ export async function answerTurn({ question, history, zone, now, providers, prog
       (broad && plan.since ? summarizeChecks(plan.checklist, coverage, evidence, plan.since, today)
         .find(check => check.status === 'unable_to_verify') : undefined);
     let [next] = followUp.queries;
-    const alreadySearched = query => coverage.some(check => check.query.trim().toLowerCase() === query.trim().toLowerCase());
     const proposedCheck = plan.checklist.find(check => check.target === next?.target);
     if (plan.checklist.length && (!proposedCheck || alreadySearched(next.query) || (gap && covered(proposedCheck)))) {
-      next = gap && {
-        target: gap.target, since: null,
-        query: gap.vendor + (gap.kind === 'pricing' ? ' official subscription pricing update announcement' : ' official product release notes') +
-          (plan.since ? ' since ' + plan.since : '') +
-          (officialDomain(gap.vendor) ? ' site:' + officialDomain(gap.vendor) : ''),
-        objective: 'Recover missing evidence from an official source and prefer dated records.',
-      };
+      next = gap && gapQuery(gap, plan.since);
     }
     const tasks = [];
     if (next && !signal.aborted && !alreadySearched(next.query)) {

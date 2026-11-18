@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { get } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +51,14 @@ try {
     store.close();
   }
   let base = await start();
+  const [foreignHost] = await once(get(base + '/api/history', {
+    headers: { Host: 'example.invalid' }, signal: AbortSignal.timeout(5000),
+  }), 'response');
+  foreignHost.resume();
+  assert.equal(foreignHost.statusCode, 403);
+  const foreignOrigin = await fetch(base + '/api/chat', { method: 'POST',
+    headers: { Origin: 'https://example.invalid', 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(foreignOrigin.status, 403);
   const previous = await fetch(base + '/api/history?chat=' + chat, { headers, signal: AbortSignal.timeout(5000) });
   assert.equal((await previous.json()).turns[0]?.result?.answer, 'The codename was Copper Kestrel.');
   await stop();
@@ -62,7 +71,7 @@ try {
   const reply = events.find(event => event.result)?.result;
   assert.match(reply?.answer ?? '', /Copper Kestrel/i, 'New chat did not recall the saved codename');
   assert.equal(reply.coverage.length, 0, 'Recall-only request should not search the web');
-  console.log('PASS: restarted the server and recalled the saved answer from a new chat.');
+  console.log('PASS: rejected foreign hosts and origins, restarted the server, and recalled the saved answer.');
 } finally {
   await stop();
   rmSync(directory, { recursive: true });

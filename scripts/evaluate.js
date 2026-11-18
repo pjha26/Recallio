@@ -70,6 +70,7 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     const expected = required.length;
     const missingChecks = required.filter(check => !check.result).map(check => check.label);
     const missingOfficialEvidence = required.filter(check => !check.result?.officialEvidenceCount).map(check => check.label);
+    const missingRelevantEvidence = required.filter(check => !check.result?.relevantEvidenceCount).map(check => check.label);
     const covered = result.checklist.filter(check => check.evidenceCount > 0).length;
     const official = result.checklist.filter(check => check.officialEvidenceCount > 0).length;
     const directReads = result.coverage.filter(check => check.direct).length;
@@ -77,10 +78,11 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     if (missingEvidence || missingChecks.length) process.exitCode = 1;
     const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
     summaries.push({ name, elapsedMs, modelSteps, expected, covered, official, directReads, verified, missingEvidence,
-      missingChecks: missingChecks.length, missingOfficialEvidence: missingOfficialEvidence.length, checks: result.checklist.length,
+      missingChecks: missingChecks.length, missingOfficialEvidence: missingOfficialEvidence.length,
+      missingRelevantEvidence: missingRelevantEvidence.length, checks: result.checklist.length,
       unverified: Boolean(result.unverified) });
     console.log(JSON.stringify({ run, name, elapsedMs, modelSteps, directReads, missingEvidence, missingChecks,
-      missingOfficialEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
+      missingOfficialEvidence, missingRelevantEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -102,6 +104,7 @@ for (const { name } of cases) {
   console.log(JSON.stringify({ summary: name, runs: runs.length, errors: runs.length - completed.length,
     expected: range('expected'), checks: range('checks'), covered: range('covered'), official: range('official'), directReads: range('directReads'),
     missingChecks: range('missingChecks'), missingOfficialEvidence: range('missingOfficialEvidence'),
+    missingRelevantEvidence: range('missingRelevantEvidence'),
     verified: range('verified'), elapsedMs: range('elapsedMs'), modelSteps: range('modelSteps'),
     withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
     fallbackAnswers: completed.filter(item => item.unverified).length }));
