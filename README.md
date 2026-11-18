@@ -26,21 +26,39 @@ After [starting Recallio locally](#run-locally), open the address printed in the
 
 ## Architecture
 
-Recallio runs as one Node.js process. Docker is optional and runs SearXNG when you choose self-hosted search.
+Recallio runs as one local Node.js process. SQLite stores conversations on disk. Docker is optional and runs SearXNG when you choose self-hosted search.
+
+### System diagram
 
 ```mermaid
 flowchart LR
-    Browser["Browser chat"] <-->|"Messages and streamed progress"| Server["Node.js HTTP server"]
-    Server <-->|"Turns and citations"| SQLite[("SQLite")]
-    Server --> Agent["Research agent"]
-    Agent --> Models["Model adapter"]
-    Models -->|"Primary"| Groq["Groq"]
-    Models -->|"Fallback"| Gemini["Gemini"]
-    Agent --> Search["Web search adapter"]
-    Search -->|"When configured"| SearXNG["SearXNG in Docker"]
-    Search -->|"Otherwise"| Exa["Exa Search API"]
-    Agent -->|"Up to two page reads"| Pages["Public HTTPS page reader"]
+    Browser["Browser chat"]
+    DB[("SQLite on local disk")]
+    subgraph App["Recallio · one Node.js process"]
+        API["Local HTTP API"]
+        Agent["Agent: recall and plan"]
+        Models["Model adapter"]
+        Search["Web search adapter"]
+        Evidence["Evidence checks: dates, quotes, citations"]
+        API --> Agent
+        Agent -->|"Plan and draft"| Models
+        Agent -->|"When current facts are needed"| Search
+        Search -->|"Excerpts and links"| Evidence
+        Agent -->|"Draft and comparison window"| Evidence
+        Evidence -->|"Cited answer, clarification, or fallback"| API
+    end
+    Browser -->|"Question"| API
+    API -->|"Progress and saved answer"| Browser
+    API <-->|"Read history and save turns"| DB
+    Models -->|"First when configured"| Groq["Groq"]
+    Models -->|"Backup when configured"| Gemini["Gemini"]
+    Search <-->|"When configured"| SearXNG["SearXNG · optional Docker service"]
+    Search <-->|"Alternative search"| Exa["Exa"]
+    Agent -->|"Up to two page reads"| Pages["Public HTTPS pages"]
+    Pages -->|"Extracted text"| Evidence
 ```
+
+### One question, step by step
 
 ```mermaid
 sequenceDiagram
