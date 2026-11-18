@@ -18,6 +18,11 @@ const officialPages = {
   supabase: { pricing: 'https://supabase.com/pricing', release: 'https://supabase.com/changelog' },
 };
 
+export function mentionedVendors(text) {
+  return Object.keys(domains).filter(name => !['close', 'copper', 'neon'].includes(name) &&
+    new RegExp('\\b' + name + '\\b', 'i').test(text));
+}
+
 export function knownOfficialPage(vendor, kind) {
   const name = vendor.toLowerCase().trim();
   return Object.hasOwn(officialPages, name) ? officialPages[name][kind] : undefined;

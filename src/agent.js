@@ -1,4 +1,4 @@
-import { isOfficial, isRelevant, knownOfficialPage, officialDomain, rankSources, summarizeChecks, vendorSearchQuery } from './vendor-evidence.js';
+import { isOfficial, isRelevant, knownOfficialPage, mentionedVendors, officialDomain, rankSources, summarizeChecks, vendorSearchQuery } from './vendor-evidence.js';
 import { searchFailureReason } from './providers.js';
 
 const words = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
@@ -92,8 +92,18 @@ function readQueries(queries, limit) {
 function readPlan(value, { question, history, now, zone }) {
   if (typeof value?.focus !== 'string' || typeof value.review !== 'boolean') throw new Error('Invalid plan');
   const queries = readQueries(value.queries, searchBudget);
-  const targets = value.targets ?? [];
+  const dateInQuestion = /\bsince\s+(\d{4}-\d{2}-\d{2})\b/i.exec(question)?.[1];
+  const matchingTurns = dateInQuestion ? history.filter(turn => turn.date === dateInQuestion) : [];
+  const baseline = matchingTurns.length === 1 ? matchingTurns[0] : history.find(turn => turn.timestamp === value.baseline);
+  let targets = value.targets ?? [];
   if (!Array.isArray(targets) || targets.length > 11) throw new Error('Invalid checklist');
+  if (!targets.length && matchingTurns.length === 1) {
+    const kinds = [];
+    if (/\b(?:price|prices|pricing)\b/i.test(question)) kinds.push('pricing');
+    if (/\b(?:shipped|ship|released?|releases)\b/i.test(question)) kinds.push('release');
+    if (kinds.length) targets = mentionedVendors(baseline.question + ' ' + baseline.answer)
+      .slice(0, Math.floor((searchBudget - 1) / kinds.length)).map(vendor => ({ vendor, kinds }));
+  }
   const checklist = [];
   for (const target of targets) {
     if (typeof target?.vendor !== 'string' || !target.vendor.trim() || target.vendor.length > 90 ||
@@ -108,10 +118,9 @@ function readPlan(value, { question, history, now, zone }) {
     }
   }
   if (checklist.length >= searchBudget) throw new Error('Checklist exceeds search budget');
-  const baseline = history.find(turn => turn.timestamp === value.baseline);
   const comparison = value.comparison === true ||
     (/\bsince\b/i.test(question) && /\b(?:chang\w*|pric\w*|ship\w*|releas\w*|updates?)\b/i.test(question));
-  const date = /\bsince\s+(\d{4}-\d{2}-\d{2})\b/i.exec(question)?.[1] ?? baseline?.date;
+  const date = dateInQuestion ?? baseline?.date;
   const parsed = new Date(date);
   const since = Number.isFinite(+parsed) && parsed.toISOString().slice(0, 10) === date && date <= day(now, zone) ? date : undefined;
   const initial = checklist.map(({ target, vendor, kind }) => ({

@@ -126,6 +126,29 @@ test('a dated turn outranks newer unrelated conversations', () => {
   assert.equal(matches[0].question, 'Postgres hosting?');
 });
 
+test('an exact date and a named vendor recover an omitted pricing target', async () => {
+  const result = await answerTurn({
+    question: 'Has pricing changed since 2026-11-09?', zone: 'UTC', now: '2026-11-12T12:00:00Z',
+    history: [{ date: '2026-11-09', timestamp: '2026-11-09T12:00:00Z', question: 'Compare Postgres hosting.',
+      answer: 'We discussed Supabase.' }],
+    signal: new AbortController().signal, progress() {},
+    providers: {
+      async search(query) {
+        assert.match(query, /^supabase .*pricing/i);
+        return [{ url: 'https://supabase.com/pricing', title: 'Pricing', text: 'The Pro plan starts at $25 per month.' }];
+      },
+      async model(prompt, input, validate) {
+        if (!input.evidence) return validate({ focus: 'Prices', review: false, queries: [] });
+        if (prompt.startsWith('Return JSON only with a queries array')) return validate({ queries: [] });
+        return validate({ answer: 'Historical pricing: unable to verify.', citations: [], checks: [] });
+      },
+    },
+  });
+  assert.equal(result.comparisonStart, '2026-11-09');
+  assert.equal(result.checklist[0].vendor.toLowerCase(), 'supabase');
+  assert.equal(result.checklist[0].status, 'unable_to_verify');
+});
+
 test('Gemini completes the answer using existing evidence after Groq fails', async t => {
   const calls = [];
   const groq = value => Response.json({ choices: [{ message: { content: JSON.stringify(value) } }] });
