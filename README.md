@@ -4,6 +4,26 @@ Recallio is a chat agent that remembers earlier conversations and checks what ha
 
 [Design summary](DESIGN.md) · [Architecture decisions and roadmap](DECISIONS.md) · [Deployment plan](DEPLOYMENT.md)
 
+## What you can do
+
+| Feature | How it works |
+| --- | --- |
+| Chat and recall | Ask a question, reopen a saved conversation, or start a **New chat** and ask about an earlier one. Recallio uses relevant turns saved in the same browser session, including after a server restart. It can answer a recall question from saved history without searching the web. |
+| Verify an earlier answer | Ask what you asked on a given date and whether the answer still holds. Recallio retrieves the saved question and searches for evidence about the current claim. |
+| Compare vendors over time | Ask whether shortlisted vendors changed pricing or shipped releases. Recallio checks pricing and releases separately. A historical comparison needs a date from the question or a matched saved turn. If it cannot establish the date, it asks for clarification. |
+| Review the evidence | Follow citation numbers to the collapsible **Sources** list. The checklist separates **Confirmed change**, **No change found in checked sources**, and **Unable to verify**. A no-change result requires evidence covering the requested period. A price quote preserves the plan and billing period. |
+| Recover from failures | The chat shows progress while the server works. An interrupted saved turn can be retried. With both model keys configured, Gemini can retry a failed Groq step using the same history or evidence. If sources are missing or the answer fails validation, Recallio can show a partial result with citations and unresolved checks. |
+| Customize the chat | Use the suggested prompts to fill the composer, switch between the arcade and violet themes, or open **Play Memory Run** on the welcome screen. The game loads when opened. |
+
+## Try the workflow
+
+After [starting Recallio locally](#run-locally), open the address printed in the terminal.
+
+1. In a new chat, ask “Shortlist five CRM tools for a 20-person sales team.” Or start with one of the suggested questions.
+2. Choose **New chat** and ask “Which tools did we shortlist, and has any changed pricing or shipped a release since that discussion?” If the reference is ambiguous, use the saved conversation's date in `YYYY-MM-DD` format after “since.”
+3. Read the vendor checklist and expand **Sources**. Today's pricing page can show current terms. The historical check stays unresolved unless dated evidence establishes the change.
+4. Restart Recallio and reopen the same URL in the same browser profile. Use the **Conversation** menu to reopen either chat, or ask about the earlier turn from another new chat.
+
 ## Architecture
 
 Recallio runs as one Node.js process. Docker is optional and runs SearXNG when you choose self-hosted search.
@@ -19,7 +39,7 @@ flowchart LR
     Agent --> Search["Web search adapter"]
     Search -->|"When configured"| SearXNG["SearXNG in Docker"]
     Search -->|"Otherwise"| Exa["Exa Search API"]
-    Agent -->|"Up to two result pages"| Pages["Public HTTPS page reader"]
+    Agent -->|"Up to two page reads"| Pages["Public HTTPS page reader"]
 ```
 
 ```mermaid
@@ -32,23 +52,27 @@ sequenceDiagram
     User->>App: Send a question
     App->>DB: Save the turn and retrieve relevant history
     App->>Model: Plan the answer and any searches
-    opt Current evidence is needed
-        App-->>User: Stream search progress
-        App->>Web: Run bounded parallel searches
-        Web-->>App: Return excerpts and URLs
-        opt Evidence needs a closer look
-            App->>Model: Review coverage and select a gap
-            App->>Web: Run a follow-up query and read selected pages as needed
-            Web-->>App: Return additional evidence
+    alt Historical comparison has no start date
+        App->>App: Prepare a clarification
+    else Continue with a valid plan
+        opt Current evidence is needed
+            App-->>User: Stream research progress
+            App->>Web: Run bounded parallel searches
+            Web-->>App: Return excerpts and URLs
+            opt A gap needs a closer look
+                App->>Web: Run a targeted follow-up or read official pages
+                Web-->>App: Return additional evidence
+            end
         end
+        App->>App: Assign evidence and checklist statuses
+        App->>Model: Draft the answer using history and evidence
+        App->>App: Validate citations and render checked quotes or return a fallback
     end
-    App->>Model: Write the answer using history and evidence
-    App->>App: Validate citation IDs
     App->>DB: Save the answer and citations
-    App-->>User: Return the cited answer
+    App-->>User: Return the answer
 ```
 
-The server owns the search results. If Groq fails while writing the answer, Gemini can use the results already collected. A search timeout or a missing historical price leaves a gap that Recallio can report alongside verified findings.
+The server allows up to 12 searches per turn, including the reserved follow-up, with up to four searches at once during the initial batch. It can also read up to two public HTTPS pages. Vendor results are ranked by official domain and relevant page titles or paths. The server assigns historical statuses and validates the evidence the models use. It can skip synthesis when a planned search retrieves no usable evidence.
 
 ## Run locally
 
@@ -84,22 +108,17 @@ Compose enables JSON and publishes the service on localhost only. If port 43193 
 
 The included SearXNG settings enable Bing and Yahoo. An existing SearXNG instance keeps its own settings. To try this mix without replacing that instance, run the Compose service on a different port and point `SEARXNG_URL` at it.
 
-## Check conversation recall
+## Data and deployment
 
-To test the UI, select **Check pricing changes** on a new chat and verify that it fills the composer. Edit the text or clear it before following the steps below. After sending a message, check that the reply, any vendor statuses, and any source links are readable. Use **New chat** and the **Conversation** menu to switch between a new and saved chat. On a narrow window, check that the composer and Send button remain usable.
-
-1. Ask “Compare the entry-level Postgres hosting plans from Neon and Supabase for a small app.”
-2. Restart Recallio, choose **New chat**, and ask “What did we conclude about Postgres hosting, and has any pricing changed since?”
-3. Check that the answer recalls the earlier comparison, links to evidence, and calls out any missing historical baseline.
-
-Run `npm test` for the SQLite recovery and mocked-provider tests. These tests need no keys.
+The app binds to localhost and scopes saved chats by a browser cookie. Model calls receive your question and selected chat history. Search calls send the generated queries to the configured search provider. Use non-sensitive sample chats for the reviewer demo and keep API keys in the ignored `.env` file. See the [deployment plan](DEPLOYMENT.md) for the authentication, HTTPS, storage, and quota work needed before hosting it for others.
 
 ## Evaluation and hiring demo
 
 | Command | What it runs |
 | --- | --- |
+| `npm test` | Unit and mocked-provider tests for memory, evidence, retries, and search. No API keys needed. |
 | `npm run eval` | The three hiring prompts with seeded chat history, fixed synthetic search results, and your configured model. The CRM fixture includes a timeout, a preview, a shipped release, and a price change. |
-| `npm run eval:web` | The same prompts with live search. Each report includes elapsed time, per-vendor search coverage, failure reasons, cited evidence, and the answer for review. |
+| `npm run eval:web` | The three hiring scenarios with live search and the current date. Each report includes elapsed time, coverage, behavior checks, cited evidence, and the answer. |
 | `npm run search:bench` | Runs ten fixed CRM queries against SearXNG without models or direct page reads. It reports official host hits in the first five results, returned engines, upstream errors, and elapsed time. |
 | `npm run demo` | Starts a temporary local server, seeds a chat, restarts the server, and asks from a new chat in the same session. It verifies recall through the HTTP API with a stubbed model and removes its temporary database afterwards. |
 
@@ -112,8 +131,6 @@ When a vendor check lacks a relevant official search result, Recallio can read u
 The benchmark defaults to three rounds at concurrency 1, 2, and 4. To compare the default engine mix with individual engine shortcuts, set `SEARCH_BENCH_ENGINES=default,bing,yahoo`. Use `SEARCH_BENCH_RUNS` and `SEARCH_BENCH_WORKERS` to limit the comparison. In the local comparison, the previous default covered 0 of 10 CRM checks. Bing alone covered 6 of 10 across all three concurrency levels. The shipped Bing and Yahoo mix covered 9 of 10 in three consecutive runs with four workers. Freshsales releases lacked an official host hit. These counts measure source availability. Historical confirmation still requires dated evidence.
 
 In PowerShell, set `$env:EVAL_RUNS = '3'` before an evaluation to repeat each prompt three times. The summary reports ranges for checklist coverage, verified outcomes, elapsed time, and model steps. It also counts fallback answers. Run `Remove-Item Env:EVAL_RUNS` to restore the default of one run.
-
-For vendor research, Recallio builds separate pricing and release checks and shows a status for each. When both model keys are configured, Groq goes first and Gemini can continue a failed model step with the same history and evidence. Search still depends on the configured search service.
 
 ## Troubleshooting
 
