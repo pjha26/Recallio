@@ -2,7 +2,7 @@
 
 Recallio is a chat agent that remembers earlier conversations and checks what has changed using web search. Ask whether a vendor changed its pricing since an earlier discussion, and Recallio retrieves that conversation, checks current sources, and cites what it can verify.
 
-[Design summary](DESIGN.md) · [Architecture decisions and roadmap](DECISIONS.md)
+[Design summary](DESIGN.md) · [Architecture decisions and roadmap](DECISIONS.md) · [Deployment plan](DEPLOYMENT.md)
 
 ## Architecture
 
@@ -105,7 +105,7 @@ Run `npm test` for the SQLite recovery and mocked-provider tests. These tests ne
 
 `npm run eval` and `npm run eval:web` need a model key. The live web evaluation also needs SearXNG or Exa. The benchmark needs a SearXNG URL. The restart demo needs no keys. Fixture prices and releases are synthetic. Live results vary with upstream search availability and model output.
 
-Both evaluations exit with an error if the plan omits a required vendor and check type. The live evaluation also fails when a prompt retrieves no web evidence. The report separates official hosts, relevant page titles or paths, and verified outcomes backed by dated quotes.
+Both evaluations exit with an error if the plan omits a required vendor and check type, misses the saved question on dated recall, or uses the wrong historical window. A historical verdict must carry a dated quote and citation. The live evaluation uses the current date and also fails when a prompt retrieves no web evidence. The report separates official hosts, relevant page titles or paths, and verified outcomes backed by dated quotes.
 
 When a vendor check lacks a relevant official search result, Recallio can read up to two known official vendor pages. When both types are missing and mapped, it tries one pricing page and one release index. If other search results arrived, the reserved follow-up can check another gap while those reads run. The evaluation counts direct reads separately. A release index is a reference link and cannot confirm an individual release.
 

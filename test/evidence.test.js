@@ -60,7 +60,7 @@ test('an unresolved checklist cannot be contradicted by a no-change summary', as
 
 test('partial search excerpts cannot support a claim about missing changelog entries', async () => {
   const result = await answerTurn({
-    question: 'Did HubSpot ship anything since Monday?', history: [], zone: 'UTC',
+    question: 'Did HubSpot ship anything since 2026-11-09?', history: [], zone: 'UTC',
     now: '2026-11-12T15:00:00Z', progress() {}, signal: new AbortController().signal,
     providers: {
       async search() {
@@ -79,9 +79,10 @@ test('partial search excerpts cannot support a claim about missing changelog ent
   assert.doesNotMatch(result.answer, /does not contain entries/);
 });
 
-test('a valid quote cannot support a different amount in the answer', async () => {
-  const quote = 'The Pro subscription starts at USD 25.00 per month.';
-  for (const [amount, usedFallback] of [['$25', false], ['$250', true]]) {
+test('a price quote cannot be used to change the amount, plan, or billing period', async () => {
+  const quote = 'The Pro subscription starts at $25 per month.';
+  for (const [price, usedFallback] of [[quote, false], [quote.replace('$25', '$250'), true],
+    [quote.replace('Pro', 'Enterprise'), true], [quote.replace('month', 'year'), true]]) {
     const result = await answerTurn({
       question: 'What does Pro cost?', history: [], zone: 'UTC', now: '2026-11-12T15:00:00Z',
       progress() {}, signal: new AbortController().signal,
@@ -90,13 +91,33 @@ test('a valid quote cannot support a different amount in the answer', async () =
         async model(_prompt, input, validate) {
           if (!input.evidence) return validate({ focus: 'Pro price', review: false,
             queries: [{ query: 'Pro pricing', objective: 'Find subscription price', since: null }] });
-          return validate({ answer: `The Pro subscription starts at ${amount} per month [1].`, citations: [1],
+          return validate({ answer: price === quote ? '{{price:1}}' : `“${price}” [1]`, citations: [1],
             checks: [{ kind: 'base_price', id: 1, quote }] });
         },
       },
     });
     assert.equal(Boolean(result.unverified), usedFallback);
-    assert.equal(result.answer.includes(amount), !usedFallback);
+    assert.equal(result.answer.includes(price), !usedFallback);
+    assert.ok(result.answer.includes(quote));
+  }
+});
+
+test('historical comparisons with an absent or invented baseline ask for clarification before search', async () => {
+  for (const baseline of [null, '2026-11-01T12:00:00Z']) {
+    const result = await answerTurn({
+      question: 'Has Supabase pricing changed since our chat?', history: [], zone: 'UTC', now: '2026-11-12T15:00:00Z',
+      progress() {}, signal: new AbortController().signal,
+      providers: {
+        async search() { assert.fail('Historical search requires a start date'); },
+        async model(_prompt, _input, validate) {
+          return validate({ focus: 'Price changes', review: false, comparison: false, queries: [],
+            baseline, targets: [{ vendor: 'Supabase', kinds: ['pricing'] }] });
+        },
+      },
+    });
+    assert.match(result.answer, /couldn’t establish a start date/);
+    assert.equal(result.comparisonStart, null);
+    assert.equal(result.checklist[0].status, 'unable_to_verify');
   }
 });
 

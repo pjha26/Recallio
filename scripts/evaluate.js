@@ -2,7 +2,8 @@ import { performance } from 'node:perf_hooks';
 import { answerTurn, selectHistory } from '../src/agent.js';
 import { createProviders } from '../src/providers.js';
 
-const now = '2026-11-12T15:00:00Z';
+const web = process.argv.includes('--web');
+const now = web ? new Date().toISOString() : '2026-11-12T15:00:00Z';
 const zone = 'UTC';
 const vendors = ['HubSpot', 'Salesforce', 'Pipedrive', 'Zoho CRM', 'Freshsales'];
 const postgres = { question: 'What does the Supabase Pro plan cost for a small Postgres project?',
@@ -18,7 +19,17 @@ const cases = [
     history: postgres, entities: ['Supabase'] },
 ];
 
-const web = process.argv.includes('--web');
+if (web) {
+  // Live cases measure the current web against a real comparison window.
+  for (const [index, days] of [[0, 3], [2, 2]]) {
+    const testCase = cases[index];
+    testCase.history = { ...testCase.history, created: new Date(Date.parse(now) - days * 86400000).toISOString() };
+    const date = testCase.history.created.slice(0, 10);
+    testCase.question = index === 0
+      ? 'We shortlisted five CRM tools in an earlier chat. Has any changed pricing or shipped something big since ' + date + '?'
+      : 'We discussed Postgres hosting earlier. Has any pricing changed since ' + date + '?';
+  }
+}
 const repeat = Number(process.env.EVAL_RUNS || 1);
 if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10) throw new Error('EVAL_RUNS must be an integer from 1 to 10.');
 const providers = createProviders(process.env);
@@ -45,7 +56,7 @@ const fixtureProviders = {
   },
 };
 
-console.log(web ? 'Live web evidence' : 'Frozen synthetic evidence with live model');
+console.log((web ? 'Live web evidence' : 'Frozen synthetic evidence with live model') + ' as of ' + now);
 const summaries = [];
 const scheduled = Array.from({ length: repeat }, (_, index) =>
   cases.map(testCase => ({ ...testCase, run: index + 1 }))).flat();
@@ -75,14 +86,21 @@ for (const { run, name, question, history: seed, entities } of scheduled) {
     const official = result.checklist.filter(check => check.officialEvidenceCount > 0).length;
     const directReads = result.coverage.filter(check => check.direct).length;
     const missingEvidence = web && !result.coverage.some(check => check.ids.length);
-    if (missingEvidence || missingChecks.length) process.exitCode = 1;
+    const behaviorIssues = [];
+    if (name === 'Dated recall' && !result.answer.includes(seed.question)) behaviorIssues.push('saved-question-not-recalled');
+    if (name !== 'Dated recall' && result.comparisonStart !== history[0].date) behaviorIssues.push('wrong-comparison-start');
+    if (name !== 'Dated recall' && result.checklist.some(check => check.status !== 'unable_to_verify' &&
+        (!check.date || check.date < history[0].date || check.date > now.slice(0, 10) || !check.quote || !check.citation))) {
+      behaviorIssues.push('historical-verdict-without-dated-evidence');
+    }
+    if (missingEvidence || missingChecks.length || behaviorIssues.length) process.exitCode = 1;
     const verified = result.checklist.filter(check => check.status !== 'unable_to_verify').length;
     summaries.push({ name, elapsedMs, modelSteps, expected, covered, official, directReads, verified, missingEvidence,
       missingChecks: missingChecks.length, missingOfficialEvidence: missingOfficialEvidence.length,
       missingRelevantEvidence: missingRelevantEvidence.length, checks: result.checklist.length,
-      unverified: Boolean(result.unverified) });
+      behaviorIssues: behaviorIssues.length, unverified: Boolean(result.unverified) });
     console.log(JSON.stringify({ run, name, elapsedMs, modelSteps, directReads, missingEvidence, missingChecks,
-      missingOfficialEvidence, missingRelevantEvidence, unverified: Boolean(result.unverified), checklist: result.checklist,
+      missingOfficialEvidence, missingRelevantEvidence, behaviorIssues, unverified: Boolean(result.unverified), checklist: result.checklist,
       entities: Object.fromEntries(entities.map(entity => {
         const searches = result.coverage.filter(({ query }) => query.toLowerCase().includes(entity.toLowerCase()));
         return [entity, { searches: searches.length, withEvidence: searches.filter(check => check.ids.length).length,
@@ -105,6 +123,7 @@ for (const { name } of cases) {
     expected: range('expected'), checks: range('checks'), covered: range('covered'), official: range('official'), directReads: range('directReads'),
     missingChecks: range('missingChecks'), missingOfficialEvidence: range('missingOfficialEvidence'),
     missingRelevantEvidence: range('missingRelevantEvidence'),
+    behaviorIssues: range('behaviorIssues'),
     verified: range('verified'), elapsedMs: range('elapsedMs'), modelSteps: range('modelSteps'),
     withoutLiveEvidence: completed.filter(item => item.missingEvidence).length,
     fallbackAnswers: completed.filter(item => item.unverified).length }));

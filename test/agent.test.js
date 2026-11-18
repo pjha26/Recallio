@@ -149,7 +149,7 @@ test('Gemini completes the answer using existing evidence after Groq fails', asy
     if (host === 'api.groq.com') return new Response('', { status: 503 });
     assert.match(body, /Pro plan starts at/);
     return Response.json({ candidates: [{ content: { parts: [{
-      text: JSON.stringify({ answer: 'The Pro plan starts at $20 per month [1]. I could not verify the historical price.',
+      text: JSON.stringify({ answer: 'The Pro plan starts at $20 per month [1].\nI could not verify the historical price.',
         citations: [1], checks: [{ kind: 'base_price', id: 1, quote: 'The Pro plan starts at $20 per month.' }] }),
     }] } }] });
   });
@@ -167,7 +167,7 @@ test('one follow-up targets missing dated evidence and preserves verified result
   let modelCalls = 0;
   const source = (vendor, date, text) => ({ url: `https://${vendor}.example/pricing`, title: vendor, date, text });
   const result = await answerTurn({
-    question: 'Has pricing changed since Monday for A, B, or C?', history: [], zone: 'UTC',
+    question: 'Has pricing changed since 2026-11-09 for A, B, or C?', history: [], zone: 'UTC',
     now: '2026-11-12T12:00:00Z', progress() {}, signal: new AbortController().signal,
     providers: {
       async search(text, objective, since) {
